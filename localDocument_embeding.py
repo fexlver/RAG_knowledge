@@ -6,6 +6,10 @@ from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
 from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_community.vectorstores import Milvus
 
+
+"""
+用来手动单独把文档嵌入到向量数据库中
+"""
 # 加载环境变量
 def load_env_variables():
     load_dotenv()

@@ -1,7 +1,9 @@
 import os
 import requests
 from dotenv import load_dotenv
-
+"""
+用来测试嵌入模型是否可以正常使用
+"""
 # 加载 .env 文件中的环境变量
 load_dotenv()
 
