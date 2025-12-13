@@ -58,7 +58,11 @@
 ### **3\. 启动向量数据库 (Milvus & Attu)**
 
 在项目根目录下运行 Docker Compose 命令：  
-docker-compose up \-d
+#### 进入配置文件所在目录
+cd /path/to/your/file
+
+#### 启动服务（后台运行加 -d 参数）
+docker-compose -f docker-compose.yml up -d
 
 启动后，您可以通过浏览器访问 http://localhost:8000 进入 Attu 可视化管理界面，查看向量库状态。
 
