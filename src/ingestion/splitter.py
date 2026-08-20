@@ -32,6 +32,40 @@ def _find_section(content: str) -> str:
     return ""
 
 
+def _build_locator(page: ParsedPage, content: str, search_from: int) -> tuple[dict, int]:
+    """把切分后的文本映射回页面文本块，生成前端可消费的定位信息。"""
+
+    start = page.content.find(content, max(0, search_from))
+    if start < 0:
+        start = page.content.find(content)
+    start = max(start, 0)
+    end = start + len(content)
+    matched = [block for block in page.blocks if block.end > start and block.start < end]
+    locator: dict = {
+        "kind": "pdf" if page.page_number is not None else "text",
+        "page_number": page.page_number,
+        "anchor_text": content[:240],
+    }
+    if page.page_number is not None:
+        locator["rects"] = [list(block.rect) for block in matched if block.rect]
+    else:
+        locator.update(
+            {
+                "start_char": start,
+                "end_char": end,
+                "start_line": min(
+                    (block.start_line for block in matched if block.start_line),
+                    default=None,
+                ),
+                "end_line": max(
+                    (block.end_line for block in matched if block.end_line),
+                    default=None,
+                ),
+            }
+        )
+    return locator, max(start + 1, end - 32)
+
+
 def build_chunks(
     pages: list[ParsedPage],
     metadata: DocumentMetadata,
@@ -49,12 +83,14 @@ def build_chunks(
     chunks: list[DocumentChunk] = []
     chunk_index = 0
     for page in pages:
+        search_from = 0
         for content in splitter.split_text(page.content):
             normalized = content.strip()
             if not normalized:
                 continue
             raw_id = f"{doc_id}:{chunk_index}:{normalized}".encode()
             chunk_id = hashlib.sha256(raw_id).hexdigest()[:32]
+            locator, search_from = _build_locator(page, normalized, search_from)
             chunks.append(
                 DocumentChunk(
                     chunk_id=chunk_id,
@@ -64,6 +100,7 @@ def build_chunks(
                     page_number=page.page_number,
                     section=_find_section(normalized),
                     metadata=metadata,
+                    locator=locator,
                 )
             )
             chunk_index += 1

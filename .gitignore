@@ -13,11 +13,15 @@ __pycache__/
 .coverage
 htmlcov/
 .gradio/
+.playwright-cli/
 .ruff_cache/
 .conda/
 dist/
 build/
+node_modules/
+*.tsbuildinfo
 *.egg-info/
 eval/results/
 data/uploads/
+output/playwright/*.log
 langchain_milvus_ops.py

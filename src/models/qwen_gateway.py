@@ -82,7 +82,8 @@ class QwenGateway:
     def generate_answer(self, question: str, contexts: Sequence[str]) -> str:
         context_text = "\n\n".join(contexts)
         system = (
-            "你是食品安全知识库助手。只能依据给定资料回答；每项关键结论必须使用[1]、[2]形式引用。"
+            "你是食品安全知识库助手。只能依据给定资料回答；每项关键结论必须使用"
+            "[证据1]、[证据2]形式引用，并确认结论实际出现在对应证据块中。"
             "资料不足时明确说无法从当前知识库确认，不得编造标准条款、数值或日期。"
             "涉及处罚、健康或合规决策时提醒用户核对现行原文及主管部门要求。"
         )

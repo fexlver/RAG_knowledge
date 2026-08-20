@@ -4,8 +4,8 @@ from src.generation.composer import AnswerComposer
 
 class FakeAnswerModel:
     def generate_answer(self, question: str, contexts: list[str]) -> str:
-        assert "[1]" in contexts[0]
-        return "应按标准限定范围使用。[1]"
+        assert "[证据1]" in contexts[0]
+        return "应按标准限定范围使用。[证据1]"
 
 
 def _evidence(score: float) -> RetrievedChunk:
@@ -25,11 +25,12 @@ def test_composer_refuses_when_evidence_score_is_too_low():
     assert result.citations == []
 
 
-def test_composer_adds_traceable_citation_when_confident():
+def test_composer_keeps_only_inline_traceable_citation_when_confident():
     result = AnswerComposer(FakeAnswerModel(), minimum_score=0.2).compose(
         "问题", [_evidence(0.9)], []
     )
 
     assert result.refused is False
-    assert "GB2760.pdf" in result.answer
+    assert result.answer == "应按标准限定范围使用。[1]"
+    assert result.citations[0].source == "GB2760.pdf"
     assert result.citations[0].page_number == 8

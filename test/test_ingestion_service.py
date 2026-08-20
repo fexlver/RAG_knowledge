@@ -33,7 +33,9 @@ def test_ingestion_uses_hash_to_avoid_duplicate_embedding(tmp_path):
     store = SQLiteStore(tmp_path / "rag.db")
     model = FakeModel()
     vector_store = FakeVectorStore()
-    settings = SimpleNamespace(chunk_size=50, chunk_overlap=10)
+    settings = SimpleNamespace(
+        chunk_size=50, chunk_overlap=10, upload_dir=tmp_path / "uploads"
+    )
     service = DocumentIngestionService(store, vector_store, model, settings)
 
     first = service.ingest(document)
@@ -42,3 +44,48 @@ def test_ingestion_uses_hash_to_avoid_duplicate_embedding(tmp_path):
     assert first.status == "success"
     assert second.status == "skipped"
     assert model.calls == 1
+    doc_id = next(iter(vector_store.documents))
+    stored = store.get_document(doc_id)
+    assert stored is not None
+    assert stored["storage_path"]
+    assert (settings.upload_dir / stored["storage_path"]).is_file()
+
+
+def test_same_name_can_keep_version_history_and_restore_old_version(tmp_path):
+    document = tmp_path / "标准.txt"
+    document.write_text("食品安全标准第一版，规定添加剂使用范围。", encoding="utf-8")
+    store = SQLiteStore(tmp_path / "rag.db")
+    model = FakeModel()
+    vector_store = FakeVectorStore()
+    settings = SimpleNamespace(
+        chunk_size=50, chunk_overlap=10, upload_dir=tmp_path / "uploads"
+    )
+    service = DocumentIngestionService(store, vector_store, model, settings)
+
+    service.ingest(document)
+    first = store.list_documents()[0]
+    document.write_text("食品安全标准第二版，扩大添加剂适用范围。", encoding="utf-8")
+    service.ingest(document, duplicate_mode="overwrite")
+
+    current = store.list_documents()[0]
+    versions = store.list_document_versions(current["doc_id"])
+    assert current["version_number"] == 2
+    assert current["version_count"] == 2
+    assert len(versions) == 2
+    assert first["doc_id"] not in vector_store.documents
+
+    service.activate(first["doc_id"])
+    restored = store.get_document(first["doc_id"])
+    assert restored is not None and restored["is_current"] == 1
+    assert first["doc_id"] in vector_store.documents
+    assert current["doc_id"] not in vector_store.documents
+
+
+def test_operation_logs_are_returned_newest_first(tmp_path):
+    store = SQLiteStore(tmp_path / "rag.db")
+    store.log("文档入库", "a.pdf", "第一条")
+    store.log("删除文档版本", "a.pdf", "第二条")
+
+    logs = store.list_logs()
+
+    assert [item["detail"] for item in logs] == ["第二条", "第一条"]

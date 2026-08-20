@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "food-safety-agentic-rag"
-version = "0.2.0"
+version = "0.3.0"
 description = "面向食品安全法规与标准资料的可追溯Agentic RAG系统"
 requires-python = ">=3.11,<3.13"
 

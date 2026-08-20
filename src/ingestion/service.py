@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import mimetypes
+import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -49,6 +52,38 @@ class DocumentIngestionService:
         self.model = model
         self.settings = settings
 
+    def _persist_original(self, source: Path, doc_id: str) -> tuple[Path, str]:
+        """把上传临时文件复制到受控目录，返回文件路径和相对存储标识。"""
+
+        upload_root = Path(self.settings.upload_dir).resolve()
+        target_dir = (upload_root / doc_id).resolve()
+        if upload_root not in target_dir.parents:
+            raise ValueError("文档存储路径越界。")
+        target_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = Path(source.name).name
+        target = (target_dir / safe_name).resolve()
+        if target.parent != target_dir:
+            raise ValueError("文档文件名不安全。")
+        temporary = target.with_suffix(target.suffix + ".uploading")
+        shutil.copy2(source, temporary)
+        os.replace(temporary, target)
+        return target, target.relative_to(upload_root).as_posix()
+
+    def _delete_stored_file(self, storage_path: str | None) -> None:
+        if not storage_path:
+            return
+        upload_root = Path(self.settings.upload_dir).resolve()
+        target = (upload_root / storage_path).resolve()
+        if upload_root not in target.parents:
+            raise ValueError("拒绝删除上传目录之外的文件。")
+        if target.is_file():
+            target.unlink()
+        if target.parent != upload_root and target.parent.is_dir():
+            try:
+                target.parent.rmdir()
+            except OSError:
+                pass
+
     def ingest(self, path: str | Path, duplicate_mode: str = "skip") -> IngestionResult:
         file_path = Path(path)
         content_hash = calculate_file_hash(file_path)
@@ -76,27 +111,90 @@ class DocumentIngestionService:
         )
         embeddings = self.model.embed_documents([chunk.content for chunk in chunks])
         doc_id = content_hash[:32]
+        series_id = (
+            (old_document.get("series_id") or old_document["doc_id"])
+            if old_document
+            else doc_id
+        )
+        version_number = (
+            self.sqlite_store.next_document_version(series_id) if old_document else 1
+        )
+        stored_path: Path | None = None
         try:
             self.vector_store.add(chunks, embeddings)
-            self.sqlite_store.save_document(doc_id, metadata, chunks)
+            stored_path, relative_path = self._persist_original(file_path, doc_id)
+            self.sqlite_store.save_document(
+                doc_id,
+                metadata,
+                chunks,
+                storage_path=relative_path,
+                mime_type=mimetypes.guess_type(file_path.name)[0],
+                series_id=series_id,
+                version_number=version_number,
+                file_size=file_path.stat().st_size,
+            )
         except Exception:
             # 两个存储不支持分布式事务，尽最大努力清理本次写入。
             try:
                 self.vector_store.delete_document(doc_id)
             finally:
                 self.sqlite_store.delete_document(doc_id)
+                if stored_path and stored_path.is_file():
+                    stored_path.unlink()
             raise
 
         if old_document and duplicate_mode == "overwrite":
             old_doc_id = old_document["doc_id"]
+            # 覆盖采用可回退的版本切换：旧原文和元数据保留，但不再参与检索。
             self.vector_store.delete_document(old_doc_id)
-            self.sqlite_store.delete_document(old_doc_id)
+            self.sqlite_store.set_current_document(doc_id)
 
-        detail = f"已建立 {len(chunks)} 个带页码与章节信息的文本块。"
+        detail = (
+            f"已建立 {len(chunks)} 个带页码与章节信息的文本块，"
+            f"保存为第 {version_number} 版。"
+        )
         self.sqlite_store.log("文档入库", file_path.name, detail)
         return IngestionResult(file_path.name, "success", len(chunks), detail)
 
     def delete(self, doc_id: str) -> None:
+        document = self.sqlite_store.get_document(doc_id)
+        if not document:
+            raise KeyError(doc_id)
+        versions = self.sqlite_store.list_document_versions(doc_id)
+        fallback = next((item for item in versions if item["doc_id"] != doc_id), None)
+        if bool(document.get("is_current")) and fallback:
+            self.activate(fallback["doc_id"])
         self.vector_store.delete_document(doc_id)
         self.sqlite_store.delete_document(doc_id)
-        self.sqlite_store.log("删除文档", doc_id, "已同步删除稠密索引和关键词索引。")
+        self._delete_stored_file(document.get("storage_path"))
+        self.sqlite_store.log(
+            "删除文档版本",
+            document["file_name"],
+            f"已删除第 {document.get('version_number', 1)} 版及其索引。",
+        )
+
+    def activate(self, doc_id: str) -> None:
+        """把历史版本重新向量化并切换为当前检索版本。"""
+
+        document = self.sqlite_store.get_document(doc_id)
+        if not document:
+            raise KeyError(doc_id)
+        if bool(document.get("is_current")):
+            return
+        versions = self.sqlite_store.list_document_versions(doc_id)
+        current = next((item for item in versions if bool(item.get("is_current"))), None)
+        chunks = self.sqlite_store.get_document_chunks(doc_id)
+        if not chunks:
+            raise ValueError("目标版本没有可用文本块，无法设为当前版本。")
+        embeddings = self.model.embed_documents([chunk.content for chunk in chunks])
+        # 先恢复目标索引，确认成功后再移除旧版本，减少切换失败时的不可用窗口。
+        self.vector_store.delete_document(doc_id)
+        self.vector_store.add(chunks, embeddings)
+        if current:
+            self.vector_store.delete_document(current["doc_id"])
+        self.sqlite_store.set_current_document(doc_id)
+        self.sqlite_store.log(
+            "切换文档版本",
+            document["file_name"],
+            f"第 {document.get('version_number', 1)} 版已设为当前检索版本。",
+        )

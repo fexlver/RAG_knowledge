@@ -38,6 +38,7 @@ class DocumentChunk:
     page_number: int | None
     section: str
     metadata: DocumentMetadata
+    locator: dict[str, Any] = field(default_factory=dict)
 
     def vector_metadata(self) -> dict[str, Any]:
         values = self.metadata.to_dict()
@@ -48,6 +49,7 @@ class DocumentChunk:
                 "chunk_index": self.chunk_index,
                 "page_number": self.page_number or 0,
                 "section": self.section,
+                "locator": self.locator,
             }
         )
         return values
@@ -74,23 +76,34 @@ class RetrievedChunk:
 @dataclass(frozen=True, slots=True)
 class Citation:
     label: int
+    doc_id: str
+    chunk_id: str
     source: str
     standard_code: str
     page_number: int | None
     section: str
     excerpt: str
+    locator: dict[str, Any] = field(default_factory=dict)
 
     @property
-    def display_name(self) -> str:
+    def reference_name(self) -> str:
         code = f" {self.standard_code}" if self.standard_code else ""
         page = f"，第{self.page_number}页" if self.page_number else ""
         section = f"，{self.section}" if self.section else ""
-        return f"[{self.label}] {self.source}{code}{page}{section}"
+        return f"{self.source}{code}{page}{section}"
+
+    @property
+    def display_name(self) -> str:
+        return f"[{self.label}] {self.reference_name}"
 
 
 @dataclass(slots=True)
 class AnswerResult:
     answer: str
     citations: list[Citation]
-    trace: list[str]
+    trace: list[Any]
     refused: bool = False
+    model_profile_id: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None

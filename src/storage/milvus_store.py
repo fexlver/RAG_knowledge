@@ -76,6 +76,7 @@ class MilvusDenseStore:
                 page_number=int(values.get("page_number", 0)) or None,
                 section=values.get("section", ""),
                 metadata=metadata,
+                locator=values.get("locator") or {},
             )
             results.append(
                 RetrievedChunk(
