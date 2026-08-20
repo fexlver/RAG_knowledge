@@ -1,109 +1,115 @@
-# **🤖 Qwen-Milvus RAG: 基于通义千问与 Milvus 的智能文档问答系统**
+# 基于 Qwen 与 Milvus 的食品安全知识库问答系统
 
-## **📖 项目简介**
+面向食品安全标准、法规、公告和指南资料分散、人工定位条款效率低的问题，本项目提供文档入库、混合检索、版本比较、可追溯问答和离线评测能力。系统不会把“检索到内容”直接等同于“结论正确”：当证据相关性不足时主动拒答，并提示用户核对主管部门发布的现行原文。
 
-本项目实现了一个基于 **RAG (Retrieval-Augmented Generation)** 架构的可视化文档问答系统。系统利用 **Docker** 部署高性能向量数据库 **Milvus**，结合 **Attu** (Zilliz UI) 进行可视化管理。后端核心逻辑集成了 **阿里云通义千问 API**，实现了从文本嵌入 (Embedding) 到大模型生成 (Generation) 的全流程。  
-该系统不仅仅是一个简单的问答 Demo，更包含了一系列生产级特性，如数据分片策略、文档去重、混合召回策略、上下文记忆以及多会话窗口管理。
+## 核心能力
 
-## **✨ 核心功能**
+- PDF/TXT 按页解析，递归切分时保留文件名、页码、章节、标准号、发布日期、实施日期和有效性等元数据。
+- 使用 SHA-256 内容指纹去重；同名不同内容可选择跳过或覆盖，避免重复向量化和索引污染。
+- `Milvus Dense Top-K + SQLite FTS5 中文关键词 Top-K + RRF + Qwen Rerank` 四阶段检索，兼顾语义问题和标准号、条款号等精确词。
+- 对普通问题执行直接检索；对新旧标准、版本差异和有效性问题执行多步检索与证据融合，并在界面展示执行轨迹。
+- 回答附文件、标准号、页码和章节引用；最高重排分低于阈值时拒答，降低无依据生成。
+- SQLite 持久化文档账本、会话、消息和操作日志；Gradio 界面支持多会话切换/删除及文档索引管理。
+- `test/` 提供离线单元测试，`eval/` 提供引用率、拒答准确率、关键词命中率和延迟评测入口。
 
-### **1\. 🧠 强大的 RAG 引擎**
+## 系统链路
 
-* **大模型支持**：无缝对接阿里云**通义千问**大模型 API，提供流畅的自然语言理解与生成。  
-* **高性能检索**：使用 **Milvus** 作为向量检索引擎，支持亿级数据规模的毫秒级响应。  
-* **嵌入模型**：使用通义千问 Embeddings 模型将非结构化文本转化为高维向量。
+```text
+PDF/TXT -> 解析/元数据 -> 内容指纹 -> 分块 -> Qwen Embedding -> Milvus
+                                      \-> 中文分词 -> SQLite FTS5
 
-### **2\. 📚 智能知识库管理**
+问题 -> 历史改写 -> 查询路由 -> Dense + Keyword -> RRF -> Rerank
+     -> 置信阈值 -> Qwen 生成 -> 文件/页码/章节引用
+```
 
-* **批量上传**：支持用户批量上传 PDF、TXT 格式文档。  
-* **智能分片 (Chunking)**：内置优化的数据分片策略，根据语义和字符长度自动切割文档，保留上下文完整性。  
-* **增量更新与去重**：  
-  * **重复检测**：在存入向量库前自动计算指纹，防止重复文档造成的存储浪费和检索干扰。  
-  * **增删管理**：支持对已建立索引的文档进行删除和更新操作。
+这里的 Agent 指“查询路由 + 多步检索工具编排 + 可观测轨迹”。普通问题仍走成本更低的直接 RAG，不为了概念包装而强制执行多轮模型调用。
 
-### **3\. 🔍 高级检索与问答**
+## 快速启动（Windows PowerShell）
 
-* **优化召回策略**：不仅依靠单一的向量相似度，还结合了关键词匹配或重排序 (Rerank) 策略，提高上下文召回的精准度。  
-* **上下文记忆 (Context Memory)**：系统维护对话历史，模型能够理解“它”、“上面提到的”等指代词，实现流畅的多轮对话。  
-* **多会话窗口**：支持开启多个独立的聊天窗口，不同话题之间的上下文互不干扰。
+### 1. 创建 Conda 环境
 
-### **4\. 🖥️ 可视化交互**
+项目已经按 Python 3.11 配置。推荐使用项目内环境，避免与其他项目冲突：
 
-* **Docker 部署**：一键启动 Milvus 和 Attu 管理界面。  
-* **交互式 UI**：通过 qa\_system.py 提供友好的问答界面，实时查看检索到的参考文档片段。
+```powershell
+$env:CONDA_PKGS_DIRS = "$PWD\.conda\pkgs"
+conda env create --prefix .\.conda\envs\food-rag --file environment.yml
+conda activate .\.conda\envs\food-rag
+```
 
-## **🏗️ 系统架构**
+若环境已创建，仅需激活：
 
-| 组件 | 技术选型 | 说明 |
-| :---- | :---- | :---- |
-| **应用层** | Python (Streamlit/Gradio) | qa\_system.py: 负责 UI 交互、业务逻辑与状态管理 |
-| **模型层** | 阿里云 DashScope SDK | 调用通义千问 LLM 和 Embedding API |
-| **存储层** | Milvus (Docker) | 存储向量数据 (Vector Store) |
-| **管理层** | Attu (Docker) | 向量数据库的可视化管理工具 |
+```powershell
+conda activate .\.conda\envs\food-rag
+```
 
-## **🚀 快速开始**
+### 2. 配置密钥
 
-### **1\. 环境准备**
+```powershell
+Copy-Item .env.example .env
+```
 
-确保您的环境已安装：
+然后只在本地 `.env` 中填写 `DASHSCOPE_API_KEY`。`.env`、数据库、上传文件和 Conda 环境均已加入 `.gitignore`，禁止提交真实密钥。
 
-* [Docker](https://www.docker.com/) & [Docker Compose](https://docs.docker.com/compose/)  
-* Python 3.8+  
-* Git
+### 3. 启动 Milvus
 
-### **2\. 获取 API Key**
+```powershell
+docker compose -f milvus_docker.yml up -d
+```
 
-前往 [阿里云百炼控制台](https://dashscope.console.aliyun.com/) 获取通义千问的 API Key。
+如需 Attu 管理界面：
 
-### **3\. 启动向量数据库 (Milvus & Attu)**
+```powershell
+docker compose -f milvus_docker.yml --profile tools up -d
+```
 
-在项目根目录下运行 Docker Compose 命令：  
-#### 进入配置文件所在目录
-cd /path/to/your/file
+Attu 地址为 `http://localhost:8000`，Milvus 地址为 `127.0.0.1:19530`。
 
-#### 启动服务（后台运行加 -d 参数）
-docker-compose -f docker-compose.yml up -d
+### 4. 启动应用
 
-启动后，您可以通过浏览器访问 http://localhost:8000 进入 Attu 可视化管理界面，查看向量库状态。
+```powershell
+python app.py
+```
 
-### **4\. 安装 Python 依赖**
+访问 `http://localhost:7860`，先在“知识库管理”上传资料，再在“知识问答”提问。
 
-pip install \-r requirements.txt
+## 测试与评测
 
-### **5\. 运行问答系统**
+不依赖外部模型和 Milvus 的单元测试：
 
-设置环境变量（建议写入 .env 文件或直接在终端导出）：  
+```powershell
+pytest -q
+```
 
-\# Windows (PowerShell)  
-$env:DASHSCOPE\_API\_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxx"
+启动 Milvus、配置密钥并准备知识库后运行端到端评测：
 
-启动主程序：  
-python qa\_system.py
+```powershell
+python eval/run_eval.py --dataset eval/dataset.jsonl
+```
 
-## **📂 文件目录说明**
+结果写入 `eval/results/latest.json`，主要观察：
 
-.  
-├── qa\_system.py           \# 🚀 系统主入口：包含 UI、RAG 逻辑、会话管理  
-├── docker-compose.yml     \# 🐳 Milvus 和 Attu 的容器配置文件  
-├── requirements.txt       \# 📦 Python 依赖列表  
-└── README.md              \# 📄 项目说明文档
-└── test_milvus.py         \# 🧪 测试 Milvus 连接与向量操作  
-└── localDocument_embeding.py \# 手动文档嵌入脚本
-└── API_test.py             \# 🧪 测试 DashScope API 连接与调用
-└── check_connection.py     \# 🧪 测试 DashScope Embedding 模型连接与调用
+- `citation_rate`：可回答问题是否给出依据；
+- `refusal_accuracy`：资料不足问题是否正确拒答；
+- `keyword_hit_rate`：回答是否覆盖预期要点；
+- `average_latency_seconds`：端到端平均耗时。
 
+## 目录结构
 
-## **🛠️ 配置说明**
+```text
+src/agent/       查询路由与多步检索编排
+src/config/      环境配置
+src/domain/      领域模型
+src/generation/  引用构造与拒答控制
+src/ingestion/   解析、元数据、分块与入库
+src/models/      Qwen 模型网关
+src/retrieval/   混合召回与 RRF 融合
+src/services/    应用用例与依赖装配
+src/storage/     SQLite 与 Milvus 适配器
+src/ui/          Gradio 界面
+test/            离线测试
+eval/            端到端评测集与脚本
+```
 
-您可以在 qa\_system.py 中调整以下参数以优化性能：
+## 使用边界
 
-* CHUNK\_SIZE: 文本分片大小 (建议 500-1000 tokens)。  
-* TOP\_K: 检索召回的片段数量 (建议 3-5)。  
-* SIMILARITY\_THRESHOLD: 向量相似度阈值，用于过滤低质量召回。
-
-## **🤝 贡献与致谢**
-
-* 感谢 **Milvus** 社区提供优秀的开源向量数据库。  
-* 感谢 **阿里云 Qwen** 团队提供的大模型 API 支持。
-
-如有问题，欢迎提交 Issue 或 Pull Request！
+食品安全标准会修订或废止，自动抽取的有效性状态只能用于检索辅助，不能替代法规核验。生产使用还应接入权威标准版本源、访问控制、操作审计、敏感文档隔离和人工复核流程。
