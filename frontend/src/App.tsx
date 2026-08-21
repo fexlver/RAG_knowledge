@@ -12,6 +12,7 @@ import {
   type ModelProfile,
   type PreviewData,
   type Provider,
+  type RetrievalSettings,
   type Session,
   type TokenUsage,
   type TraceEvent,
@@ -29,6 +30,7 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [models, setModels] = useState<ModelProfile[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [retrievalSettings, setRetrievalSettings] = useState<RetrievalSettings | null>(null);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [sessionTotal, setSessionTotal] = useState<number | null>(null);
   const [view, setView] = useState<"chat" | "knowledge">("chat");
@@ -54,6 +56,7 @@ export default function App() {
     setProviders(providerItems); setModels(modelItems);
   }, []);
   const refreshDocuments = useCallback(async () => setDocuments(await api.documents()), []);
+  const refreshRetrievalSettings = useCallback(async () => setRetrievalSettings(await api.retrievalSettings()), []);
   const loadMessages = useCallback(async (sessionId: string) => {
     const data = await api.messages(sessionId);
     setMessages(data.messages); setSessionTotal(data.session_total_tokens);
@@ -62,13 +65,13 @@ export default function App() {
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
-    Promise.all([refreshSessions(), refreshModels(), refreshDocuments()])
+    Promise.all([refreshSessions(), refreshModels(), refreshDocuments(), refreshRetrievalSettings()])
       .then(async ([items]) => {
         if (items.length) setActiveId(items[0].session_id);
         else { const created = await api.createSession(); setSessions([created]); setActiveId(created.session_id); }
       })
       .catch((error) => setFatalError((error as Error).message));
-  }, [refreshDocuments, refreshModels, refreshSessions]);
+  }, [refreshDocuments, refreshModels, refreshRetrievalSettings, refreshSessions]);
   useEffect(() => { if (activeId) loadMessages(activeId).catch((error) => setFatalError((error as Error).message)); }, [activeId, loadMessages]);
 
   const activeSession = sessions.find((item) => item.session_id === activeId) || null;
@@ -105,17 +108,26 @@ export default function App() {
     const assistant: ChatMessage = { id: temporaryId, role: "assistant", content: "", trace: [], citations: [], model_profile_id: profile?.profile_id || null, model_name: profile?.display_name, usage: { input_tokens: null, output_tokens: null, total_tokens: null }, refused: false, streaming: true };
     setMessages((items) => [...items, user, assistant]); setRunning(true); setFatalError("");
     const controller = new AbortController(); abortRef.current = controller;
+    let streamFailed = false;
     const updateAssistant = (updater: (message: ChatMessage) => ChatMessage) => setMessages((items) => items.map((item) => item.id === temporaryId ? updater(item) : item));
     try {
       await streamRun(activeId, text, profile?.profile_id || null, (event) => {
         if (event.type === "text_delta") updateAssistant((item) => ({ ...item, content: item.content + String(event.data || "") }));
-        else if (event.type === "trace") updateAssistant((item) => ({ ...item, trace: [...item.trace, event.data as TraceEvent] }));
+        else if (event.type === "trace") updateAssistant((item) => {
+          const incoming = event.data as TraceEvent;
+          const identity = incoming.event_id || incoming.stage;
+          const index = item.trace.findIndex((trace) => (trace.event_id || trace.stage) === identity);
+          if (index < 0) return { ...item, trace: [...item.trace, incoming] };
+          const trace = [...item.trace]; trace[index] = incoming;
+          return { ...item, trace };
+        });
         else if (event.type === "citation") updateAssistant((item) => ({ ...item, citations: [...item.citations, event.data as Citation] }));
         else if (event.type === "usage") { const usage = event.data as TokenUsage; updateAssistant((item) => ({ ...item, usage })); setSessionTotal(usage.session_total_tokens ?? null); }
         else if (event.type === "done") { const done = event.data as ChatMessage; updateAssistant(() => ({ ...done, streaming: false })); }
-        else if (event.type === "error") { const data = event.data as { message: string }; updateAssistant((item) => ({ ...item, streaming: false, error: data.message })); }
+        else if (event.type === "error") { const data = event.data as { message: string }; streamFailed = true; updateAssistant((item) => ({ ...item, streaming: false, error: data.message })); }
       }, controller.signal);
-      await Promise.all([loadMessages(activeId), refreshSessions()]);
+      if (streamFailed) await refreshSessions();
+      else await Promise.all([loadMessages(activeId), refreshSessions()]);
     } catch (error) {
       if ((error as Error).name !== "AbortError") updateAssistant((item) => ({ ...item, streaming: false, error: (error as Error).message }));
     } finally { setRunning(false); abortRef.current = null; }
@@ -141,7 +153,7 @@ export default function App() {
       </Group>}
     </div>
     {fatalError && <div className="toast-error"><AlertCircle size={16} />{fatalError}<button onClick={() => setFatalError("")}><X size={14} /></button></div>}
-    <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} providers={providers} models={models} theme={theme} onTheme={setTheme} onRefresh={refreshModels} />
+    {retrievalSettings && <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} providers={providers} models={models} retrieval={retrievalSettings} theme={theme} onTheme={setTheme} onRefresh={refreshModels} onRefreshRetrieval={refreshRetrievalSettings} />}
     <Dialog.Root open={!!renameTarget} onOpenChange={(open) => !open && setRenameTarget(null)}><Dialog.Portal><Dialog.Overlay className="dialog-overlay" /><Dialog.Content className="small-dialog"><Dialog.Title>重命名会话</Dialog.Title><Dialog.Description>输入一个便于识别的会话名称。</Dialog.Description><input autoFocus value={renameTitle} onChange={(event) => setRenameTitle(event.target.value)} onKeyDown={(event) => event.key === "Enter" && renameSession()} /><div className="dialog-buttons"><Dialog.Close className="secondary-button">取消</Dialog.Close><button className="primary-button" onClick={renameSession}>保存</button></div></Dialog.Content></Dialog.Portal></Dialog.Root>
     <AlertDialog.Root open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="small-dialog"><div className="danger-dialog-icon"><Trash2 size={20} /></div><AlertDialog.Title>删除这个会话？</AlertDialog.Title><AlertDialog.Description>“{deleteTarget?.title}”及其全部消息将被永久删除。</AlertDialog.Description><div className="dialog-buttons"><AlertDialog.Cancel className="secondary-button">取消</AlertDialog.Cancel><AlertDialog.Action className="danger-button" onClick={deleteSession}>删除</AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
   </div>;

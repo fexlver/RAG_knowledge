@@ -91,3 +91,34 @@ def test_default_dashscope_key_is_imported_to_credential_store(tmp_path):
     assert "initial-secret" not in (tmp_path / "rag.db").read_bytes().decode(
         "utf-8", errors="ignore"
     )
+
+
+def test_existing_credential_metadata_avoids_reimport_on_background_start(tmp_path):
+    store = SQLiteStore(tmp_path / "rag.db")
+    store.upsert_provider(
+        {
+            "provider_id": "dashscope-default",
+            "name": "阿里云百炼",
+            "provider_type": "dashscope",
+            "base_url": "https://dashscope.aliyuncs.com/api/v1",
+            "has_api_key": True,
+        }
+    )
+
+    class BackgroundCredentialStore:
+        def get(self, _provider_id):
+            return None
+
+        def set(self, _provider_id, _api_key):
+            raise AssertionError("后台启动不应重复写入系统凭据库")
+
+        def delete(self, _provider_id):
+            return None
+
+    settings = SimpleNamespace(
+        dashscope_api_key="environment-secret",
+        dashscope_base_url="https://dashscope.aliyuncs.com/api/v1",
+        qwen_model="qwen-plus",
+    )
+
+    GenerationModelRegistry(store, BackgroundCredentialStore(), settings)

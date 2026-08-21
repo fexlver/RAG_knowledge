@@ -156,11 +156,16 @@ class FoodSafetyRAGService:
         detail: str,
         duration_ms: int | None = None,
         score: float | None = None,
+        *,
+        event_id: str | None = None,
+        status: str = "completed",
+        label: str | None = None,
     ) -> dict:
         event = {
+            "event_id": event_id or stage,
             "stage": stage,
-            "status": "completed",
-            "label": detail.split("：", 1)[0],
+            "status": status,
+            "label": label or detail.split("：", 1)[0],
             "detail": detail,
             "duration_ms": duration_ms,
         }
@@ -200,10 +205,26 @@ class FoodSafetyRAGService:
         history = self.sqlite_store.get_messages(
             session_id, limit=self.history_message_limit
         )
+        trace_events: dict[str, dict] = {}
+
+        def remember(event: dict) -> dict:
+            """相同 event_id 的运行态和完成态在持久化时合并为一个步骤。"""
+
+            trace_events[str(event["event_id"])] = event
+            return event
+
         rewrite_started = perf_counter()
+        event = self._trace_event(
+            "rewrite",
+            "正在结合当前问题与历史对话生成检索查询…",
+            event_id="rewrite",
+            status="running",
+            label="查询改写",
+        )
+        remember(event)
+        yield {"type": "trace", "data": event}
         # 刚写入的问题不应再次作为历史的一部分传入改写模型。
         rewritten = self.model.rewrite_query(question, history[:-1])
-        trace_events: list[dict] = []
         rewrite_detail = (
             f"查询改写：{rewritten}"
             if rewritten != question
@@ -213,34 +234,49 @@ class FoodSafetyRAGService:
             "rewrite",
             rewrite_detail,
             int((perf_counter() - rewrite_started) * 1000),
+            event_id="rewrite",
         )
-        trace_events.append(event)
+        remember(event)
         yield {"type": "trace", "data": event}
 
-        retrieval_started = perf_counter()
-        evidence, plan, _ = self.orchestrator.execute(rewritten)
-        retrieval_duration = int((perf_counter() - retrieval_started) * 1000)
-        retrieval_events = [
-            self._trace_event("route", f"查询路由：{plan.mode}；{plan.reason}"),
-            self._trace_event(
+        evidence = []
+        if hasattr(self.orchestrator, "execute_stream"):
+            for update in self.orchestrator.execute_stream(rewritten):
+                if update.progress:
+                    progress = update.progress
+                    event = self._trace_event(
+                        progress.stage,
+                        progress.detail,
+                        progress.duration_ms,
+                        event_id=progress.event_id,
+                        status=progress.status,
+                        label=progress.label,
+                    )
+                    remember(event)
+                    yield {"type": "trace", "data": event}
+                if update.evidence is not None:
+                    evidence = update.evidence
+        else:
+            # 兼容只实现 execute 的自定义编排器和离线测试桩。
+            event = self._trace_event(
                 "retrieval",
-                f"混合召回：执行 {len(plan.subqueries)} 个子查询，融合 Milvus 向量召回与 SQLite FTS5 关键词召回。",
-                retrieval_duration,
-            ),
-            self._trace_event(
-                "rerank",
-                f"二阶段重排：RRF 融合后由 Rerank 模型保留 {len(evidence)} 条高相关证据。",
-            ),
-        ]
-        if plan.mode == "multi_step":
-            retrieval_events.append(
-                self._trace_event(
-                    "fusion",
-                    f"跨步骤融合：合并 {len(plan.subqueries)} 路检索结果并按证据去重。",
-                )
+                "正在执行已配置的检索流水线…",
+                event_id="retrieval",
+                status="running",
+                label="知识库检索",
             )
-        for event in retrieval_events:
-            trace_events.append(event)
+            remember(event)
+            yield {"type": "trace", "data": event}
+            retrieval_started = perf_counter()
+            evidence, _plan, _ = self.orchestrator.execute(rewritten)
+            event = self._trace_event(
+                "retrieval",
+                f"知识库检索完成，获得 {len(evidence)} 条候选证据。",
+                int((perf_counter() - retrieval_started) * 1000),
+                event_id="retrieval",
+                label="知识库检索",
+            )
+            remember(event)
             yield {"type": "trace", "data": event}
 
         draft = self.composer.prepare(question, evidence, [])
@@ -251,9 +287,9 @@ class FoodSafetyRAGService:
             else f"置信控制：最高相关分 {top_score:.3f}，低于阈值 {self.composer.minimum_score:.3f}，执行拒答。"
         )
         confidence_event = self._trace_event(
-            "confidence", confidence_detail, score=top_score
+            "confidence", confidence_detail, score=top_score, event_id="confidence"
         )
-        trace_events.append(confidence_event)
+        remember(confidence_event)
         yield {"type": "trace", "data": confidence_event}
         for citation in draft.citations:
             yield {"type": "citation", "data": asdict(citation)}
@@ -261,6 +297,15 @@ class FoodSafetyRAGService:
         usage: TokenUsage | None = None
         generated_parts: list[str] = []
         generation_started = perf_counter()
+        generation_event = self._trace_event(
+            "generation",
+            f"正在使用 {profile['display_name']} 基于检索证据生成回答…",
+            event_id="generation",
+            status="running",
+            label="答案生成",
+        )
+        remember(generation_event)
+        yield {"type": "trace", "data": generation_event}
         if draft.refused_answer:
             generated_parts.append(draft.refused_answer)
             yield {"type": "text_delta", "data": draft.refused_answer}
@@ -280,10 +325,12 @@ class FoodSafetyRAGService:
             "generation",
             f"答案生成：使用 {len(result.citations)} 条去重证据，模型 {profile['display_name']}。",
             int((perf_counter() - generation_started) * 1000),
+            event_id="generation",
         )
-        trace_events.append(generation_event)
+        remember(generation_event)
         yield {"type": "trace", "data": generation_event}
-        result.trace = trace_events
+        persisted_trace = list(trace_events.values())
+        result.trace = persisted_trace
         result.model_profile_id = profile_id
         if usage:
             result.input_tokens = usage.input_tokens
@@ -293,7 +340,7 @@ class FoodSafetyRAGService:
             session_id,
             "assistant",
             result.answer,
-            trace_events,
+            persisted_trace,
             citations=[asdict(item) for item in result.citations],
             model_profile_id=profile_id,
             input_tokens=result.input_tokens,
@@ -314,7 +361,7 @@ class FoodSafetyRAGService:
                 "id": assistant_message_id,
                 "role": "assistant",
                 "content": result.answer,
-                "trace": trace_events,
+                "trace": persisted_trace,
                 "citations": [asdict(item) for item in result.citations],
                 "model_profile_id": profile_id,
                 "model_name": profile["display_name"],
@@ -344,7 +391,16 @@ def build_service(
     ingestion = DocumentIngestionService(
         sqlite_store, vector_store, model, app_settings
     )
-    retriever = HybridRetriever(vector_store, sqlite_store, model, app_settings)
+    retriever = HybridRetriever(
+        vector_store,
+        sqlite_store,
+        model,
+        app_settings,
+        config_loader=lambda: sqlite_store.get_setting("retrieval_pipeline"),
+        config_saver=lambda value: sqlite_store.set_setting(
+            "retrieval_pipeline", value
+        ),
+    )
     orchestrator = RetrievalOrchestrator(
         QueryPlanner(app_settings.max_agent_steps), retriever, app_settings.rrf_k
     )

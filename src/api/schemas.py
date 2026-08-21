@@ -32,3 +32,11 @@ class ModelProfileInput(BaseModel):
     model_id: str = Field(min_length=1, max_length=200)
     display_name: str = Field(min_length=1, max_length=100)
     enabled: bool = True
+
+
+class RetrievalConfigInput(BaseModel):
+    """可组合检索流水线配置。"""
+
+    retriever_ids: list[str] = Field(min_length=1, max_length=12)
+    fusion_id: str = Field(default="rrf", min_length=1, max_length=80)
+    rerank_enabled: bool = True

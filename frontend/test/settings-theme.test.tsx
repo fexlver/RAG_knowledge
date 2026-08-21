@@ -28,9 +28,16 @@ describe("模型与主题设置", () => {
           display_name: "Qwen Plus",
           enabled: true,
         }]}
+        retrieval={{
+          config: { retriever_ids: ["dense", "lexical"], fusion_id: "rrf", rerank_enabled: true },
+          retrievers: [],
+          fusion_strategies: [],
+          postprocessors: [],
+        }}
         theme="system"
         onTheme={onTheme}
         onRefresh={async () => undefined}
+        onRefreshRetrieval={async () => undefined}
       />,
     );
     expect(screen.getByText("Qwen Plus")).toBeVisible();

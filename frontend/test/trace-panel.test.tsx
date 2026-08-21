@@ -27,4 +27,18 @@ describe("TracePanel", () => {
     expect(screen.getByText("结合历史对话补全问题")).toBeVisible();
     expect(screen.getByText("36 ms")).toBeVisible();
   });
+
+  it("执行过程中自动展开并展示当前运行步骤", () => {
+    render(<TracePanel running trace={[{
+      event_id: "retriever:dense",
+      stage: "retrieval",
+      status: "running",
+      label: "语义向量检索",
+      detail: "正在召回候选文本块…",
+      duration_ms: null,
+    }]} />);
+
+    expect(screen.getByText("正在执行 · 0/1 个步骤完成")).toBeVisible();
+    expect(screen.getByText("正在召回候选文本块…")).toBeVisible();
+  });
 });

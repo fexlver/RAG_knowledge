@@ -1,5 +1,6 @@
 import * as Collapsible from "@radix-ui/react-collapsible";
-import { CheckCircle2, ChevronDown, GitBranch, Search, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronDown, GitBranch, Loader2, Search, Sparkles } from "lucide-react";
+import { useState } from "react";
 import type { TraceEvent } from "../api";
 
 const stageIcons: Record<string, typeof Search> = {
@@ -12,21 +13,23 @@ const stageIcons: Record<string, typeof Search> = {
   generation: Sparkles,
 };
 
-export function TracePanel({ trace }: { trace: TraceEvent[] }) {
+export function TracePanel({ trace, running = false }: { trace: TraceEvent[]; running?: boolean }) {
+  const [open, setOpen] = useState(running);
   if (!trace.length) return null;
+  const completed = trace.filter((item) => item.status === "completed").length;
   return (
-    <Collapsible.Root className="trace-card">
+    <Collapsible.Root className={`trace-card ${running ? "streaming" : ""}`} open={running || open} onOpenChange={(value) => !running && setOpen(value)}>
       <Collapsible.Trigger className="trace-trigger">
-        <span className="trace-status-dot" />
-        <span>已完成知识库检索 · {trace.length} 个步骤</span>
+        {running ? <Loader2 size={15} className="spin trace-live-icon" /> : <span className="trace-status-dot" />}
+        <span>{running ? `正在执行 · ${completed}/${trace.length} 个步骤完成` : `已完成知识库检索 · ${trace.length} 个步骤`}</span>
         <ChevronDown size={15} className="trace-chevron" />
       </Collapsible.Trigger>
       <Collapsible.Content className="trace-content">
         {trace.map((item, index) => {
           const Icon = stageIcons[item.stage] || CheckCircle2;
           return (
-            <div className="trace-step" key={`${item.stage}-${index}`}>
-              <Icon size={14} />
+            <div className={`trace-step ${item.status}`} key={item.event_id || `${item.stage}-${index}`}>
+              <span className="trace-step-icon">{item.status === "running" ? <Loader2 size={14} className="spin" /> : item.status === "completed" ? <CheckCircle2 size={14} /> : <Icon size={14} />}</span>
               <div>
                 <div className="trace-step-heading">
                   <strong>{item.label}</strong>

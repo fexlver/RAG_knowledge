@@ -10,9 +10,10 @@ import {
   type ThreadMessageLike,
 } from "@assistant-ui/react";
 import { ArrowDown, Copy, Loader2, Send, Square } from "lucide-react";
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useContext } from "react";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage, Citation, ModelProfile, Session, TokenUsage, TraceEvent } from "../api";
+import { ModelPicker } from "./ModelPicker";
 import { TracePanel } from "./TracePanel";
 
 interface ChatUiContextValue { onCitation: (citation: Citation) => void; }
@@ -41,7 +42,7 @@ function UserMessage() {
 
 function AssistantMessage() {
   const custom = useAuiState((state) => state.message.metadata.custom) as {
-    trace?: TraceEvent[]; citations?: Citation[]; usage?: TokenUsage; modelName?: string; error?: string;
+    trace?: TraceEvent[]; citations?: Citation[]; usage?: TokenUsage; modelName?: string; error?: string; streaming?: boolean;
   } | undefined;
   const text = useAuiState((state) => state.message.content.filter((part) => part.type === "text").map((part) => part.type === "text" ? part.text : "").join(""));
   const messageId = useAuiState((state) => state.message.id);
@@ -50,7 +51,7 @@ function AssistantMessage() {
     <div className="assistant-content">
       <MessagePrimitive.Content components={{ Text: CitationMarkdown }} />
       {custom?.error && <p className="message-error">{custom.error}</p>}
-      <TracePanel key={String(messageId)} trace={custom?.trace || []} />
+      <TracePanel key={String(messageId)} trace={custom?.trace || []} running={Boolean(custom?.streaming)} />
       <div className="message-meta"><span>{custom?.modelName || "知识库助手"}</span>{custom?.usage?.total_tokens != null && <span>{custom.usage.total_tokens.toLocaleString()} tokens</span>}<button title="复制回答" onClick={() => navigator.clipboard?.writeText(text)}><Copy size={13} /></button></div>
     </div>
   </MessagePrimitive.Root>;
@@ -87,6 +88,7 @@ const convertMessage = (message: ChatMessage): ThreadMessageLike => ({
       modelName: message.model_name,
       refused: message.refused,
       error: message.error,
+      streaming: message.streaming,
     },
   },
 });
@@ -113,7 +115,6 @@ export function ChatWorkbench(props: Props) {
     },
   });
   const selectedModel = props.session?.model_profile_id || props.models[0]?.profile_id || "";
-  const lastUsage = useMemo(() => [...props.messages].reverse().find((item) => item.role === "assistant")?.usage, [props.messages]);
   return <ChatUiContext.Provider value={{ onCitation: props.onCitation }}>
     <AssistantRuntimeProvider runtime={runtime}>
       <main className="chat-workbench">
@@ -131,8 +132,8 @@ export function ChatWorkbench(props: Props) {
               <ComposerPrimitive.Root className="composer-root">
                 <ComposerPrimitive.Input className="composer-input" placeholder="询问食品安全标准、法规或公告…" rows={2} />
                 <div className="composer-toolbar">
-                  <select aria-label="选择生成模型" value={selectedModel} onChange={(event) => props.onModel(event.target.value)}>{props.models.filter((item) => Boolean(item.enabled)).map((model) => <option key={model.profile_id} value={model.profile_id}>{model.display_name}</option>)}</select>
-                  <div className="token-usage">{lastUsage?.total_tokens != null ? <span>本轮 {lastUsage.input_tokens ?? "—"} / {lastUsage.output_tokens ?? "—"} tokens</span> : <span>提供方未返回用量</span>}<span>会话累计 {props.sessionTotal?.toLocaleString() ?? "—"}</span></div>
+                  <ModelPicker models={props.models} selectedId={selectedModel} onSelect={props.onModel} />
+                  <div className="token-usage" title="当前会话累计 Token"><span>{props.sessionTotal?.toLocaleString() ?? "—"} tokens</span></div>
                   <AuiIf condition={(state) => !state.thread.isRunning}><ComposerPrimitive.Send className="send-button" title="发送"><Send size={17} /></ComposerPrimitive.Send></AuiIf>
                   <AuiIf condition={(state) => state.thread.isRunning}><ComposerPrimitive.Cancel className="send-button stop" title="停止"><Square size={15} /></ComposerPrimitive.Cancel></AuiIf>
                 </div>

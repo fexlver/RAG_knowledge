@@ -8,12 +8,33 @@ export interface Session {
 }
 
 export interface TraceEvent {
+  event_id?: string;
   stage: string;
   status: "pending" | "running" | "completed" | "failed";
   label: string;
   detail: string;
   duration_ms: number | null;
   score?: number;
+}
+
+export interface RetrievalPlugin {
+  plugin_id: string;
+  label: string;
+  description: string;
+  category: "retriever" | "fusion" | "postprocessor";
+}
+
+export interface RetrievalConfig {
+  retriever_ids: string[];
+  fusion_id: string;
+  rerank_enabled: boolean;
+}
+
+export interface RetrievalSettings {
+  config: RetrievalConfig;
+  retrievers: RetrievalPlugin[];
+  fusion_strategies: RetrievalPlugin[];
+  postprocessors: RetrievalPlugin[];
 }
 
 export interface Citation {
@@ -154,6 +175,13 @@ export const api = {
       body: JSON.stringify(data),
     }),
   testModel: (id: string) => request<{ ok: boolean; response: string }>(`/api/models/${id}/test`, { method: "POST" }),
+  retrievalSettings: () => request<RetrievalSettings>("/api/retrieval/config"),
+  saveRetrievalSettings: (data: RetrievalConfig) =>
+    request<RetrievalSettings>("/api/retrieval/config", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
   documents: () => request<DocumentRecord[]>("/api/documents"),
   uploadDocuments: (form: FormData, duplicateMode: string) =>
     request<Array<{ file_name: string; status: string; chunk_count: number; detail: string }>>(

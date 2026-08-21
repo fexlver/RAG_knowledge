@@ -147,9 +147,18 @@ class GenerationModelRegistry:
     def ensure_default_profile(self) -> None:
         provider_id = "dashscope-default"
         profile_id = "qwen-default"
-        if self.settings.dashscope_api_key and not self.credentials.get(provider_id):
+        existing_provider = self.store.get_provider(provider_id)
+        # 已导入过的凭据不在后台服务启动时重复写入。Windows Credential
+        # Manager 可能在非交互登录会话中拒绝 CredWrite，但 DashScope 仍可使用
+        # 当前进程的环境变量完成调用。
+        should_import_key = (
+            bool(self.settings.dashscope_api_key)
+            and not bool(existing_provider and existing_provider.get("has_api_key"))
+            and not self.credentials.get(provider_id)
+        )
+        if should_import_key:
             self.credentials.set(provider_id, self.settings.dashscope_api_key)
-        if not self.store.get_provider(provider_id):
+        if not existing_provider:
             self.store.upsert_provider(
                 {
                     "provider_id": provider_id,

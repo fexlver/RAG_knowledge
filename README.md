@@ -12,15 +12,21 @@
 
 ### 可观测执行轨迹
 
-执行轨迹默认折叠，展开后展示查询改写、查询路由、混合召回、二阶段重排、置信控制和答案生成阶段及实际耗时。
+执行过程中轨迹会自动展开，并按“运行中→已完成”的状态逐步更新查询改写、路由、各检索插件、融合、重排、置信控制和答案生成；完成后仍可折叠查看各阶段耗时。
 
-![结构化执行轨迹](output/playwright/trace-expanded.png)
+![流式结构化执行轨迹](output/playwright/trace-streaming.png)
 
 ### 原文定位与段落高亮
 
-点击正文中的 `[1]` 引用后打开右侧预览区，聊天区同步收缩。PDF 自动跳转页码并以低饱和绿色标注命中段落，TXT 按字符及行号定位；窄屏时预览区切换为抽屉。
+点击正文中的 `[1]` 引用后打开右侧预览区，聊天区同步收缩。PDF 自动跳转页码，并利用 PDF.js 文本层在真实文字行上显示黄色荧光笔高亮，不再使用覆盖段落的色块；TXT 按字符及行号定位，窄屏时预览区切换为抽屉。
 
 ![PDF 原文定位与高亮](output/playwright/citation-preview.png)
+
+### 可组合检索策略
+
+设置页根据后端插件注册表动态展示检索能力，可组合语义向量检索、关键词检索、RRF 融合和模型重排。配置持久化到 SQLite 并从下一轮问答开始生效，后续多模态检索和图检索可通过注册新插件接入。
+
+![可组合检索策略](output/playwright/retrieval-settings.png)
 
 ### 知识库管理
 
@@ -31,6 +37,7 @@
 ## 核心能力
 
 - `Milvus Dense Top-K + SQLite FTS5 + RRF + Qwen Rerank` 四阶段检索，兼顾自然语言语义与标准号、条款号等精确词。
+- 使用检索插件注册表和可组合流水线解耦召回、融合与后处理阶段；设置页可启停检索源与模型重排，主问答编排无需感知具体检索实现。
 - 查询改写与查询路由：普通事实问题执行直接检索，版本比较、有效性等复杂问题拆成多步检索并融合证据。
 - 生成前执行相关性阈值判断；资料不足时拒答，降低无依据生成。
 - 使用“证据标签”与最终引用编号分离，过滤越界引用，避免把法律条款序号误识别为引用编号。
@@ -109,6 +116,7 @@ python app.py
 | 会话 | `GET/POST /api/sessions`、`PATCH/DELETE /api/sessions/{id}` |
 | 消息与运行 | `GET /api/sessions/{id}/messages`、`POST /api/sessions/{id}/runs` |
 | 模型 | `GET/POST /api/providers`、`GET/POST /api/models`、`POST /api/models/{id}/test` |
+| 检索策略 | `GET/PATCH /api/retrieval/config` |
 | 文档 | `GET/POST /api/documents`、`DELETE /api/documents/{id}` |
 | 文档版本 | `GET /api/documents/{id}/versions`、`POST /api/documents/{id}/activate` |
 | 操作日志 | `GET /api/operation-logs` |
@@ -133,7 +141,7 @@ npm run test
 npm run build
 ```
 
-当前覆盖 SQLite 增量迁移、旧数据兼容、文档版本保留与恢复、操作日志、会话与模型绑定、两类生成适配器、SSE 顺序、Token 保存、密钥隔离、路径安全、PDF/TXT 定位，以及会话菜单、轨迹折叠、引用预览和主题持久化。
+当前覆盖 SQLite 增量迁移、旧数据兼容、检索插件组合与配置持久化、文档版本保留与恢复、操作日志、会话与模型绑定、两类生成适配器、SSE 运行态/完成态顺序、Token 保存、密钥隔离、路径安全、PDF/TXT 定位，以及检索设置、会话菜单、流式轨迹、引用预览和主题持久化。
 
 ## 旧数据兼容
 

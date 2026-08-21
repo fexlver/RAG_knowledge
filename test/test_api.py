@@ -13,11 +13,40 @@ class FakeIngestion:
         return None
 
 
+class FakeOrchestrator:
+    def __init__(self):
+        self.config = {
+            "retriever_ids": ["dense", "lexical"],
+            "fusion_id": "rrf",
+            "rerank_enabled": True,
+        }
+
+    def retrieval_settings(self):
+        return {
+            "config": self.config,
+            "retrievers": [
+                {
+                    "plugin_id": "dense",
+                    "label": "语义向量检索",
+                    "description": "测试",
+                    "category": "retriever",
+                }
+            ],
+            "fusion_strategies": [],
+            "postprocessors": [],
+        }
+
+    def configure_retrieval(self, value):
+        self.config = value
+        return self.retrieval_settings()
+
+
 class FakeService:
     def __init__(self, store):
         self.sqlite_store = store
         self.ingestion = FakeIngestion()
         self.generation_models = None
+        self.orchestrator = FakeOrchestrator()
 
     def new_session(self):
         self.sqlite_store.create_session("session-1")
@@ -85,3 +114,24 @@ def test_provider_api_masks_api_key(tmp_path):
     assert response.status_code == 201
     assert "plain-secret" not in response.text
     assert "plain-secret" not in str(store.list_providers())
+
+
+def test_retrieval_pipeline_configuration_api(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    before = client.get("/api/retrieval/config").json()
+    updated = client.patch(
+        "/api/retrieval/config",
+        json={
+            "retriever_ids": ["dense"],
+            "fusion_id": "rrf",
+            "rerank_enabled": False,
+        },
+    ).json()
+
+    assert before["config"]["retriever_ids"] == ["dense", "lexical"]
+    assert updated["config"] == {
+        "retriever_ids": ["dense"],
+        "fusion_id": "rrf",
+        "rerank_enabled": False,
+    }

@@ -119,6 +119,11 @@ class SQLiteStore:
             detail TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS application_settings (
+            setting_key TEXT PRIMARY KEY,
+            value_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         """
         with closing(self._connect()) as connection:
             connection.executescript(schema)
@@ -619,6 +624,29 @@ class SQLiteStore:
                 (safe_limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def get_setting(self, key: str) -> dict | None:
+        """读取一项应用级 JSON 配置。"""
+
+        with closing(self._connect()) as connection:
+            row = connection.execute(
+                "SELECT value_json FROM application_settings WHERE setting_key = ?",
+                (key,),
+            ).fetchone()
+        return json.loads(row["value_json"]) if row else None
+
+    def set_setting(self, key: str, value: dict) -> None:
+        """幂等保存应用级配置，避免检索策略散落在业务代码中。"""
+
+        now = datetime.now(UTC).isoformat()
+        with closing(self._connect()) as connection:
+            connection.execute(
+                "INSERT INTO application_settings(setting_key, value_json, updated_at) "
+                "VALUES (?, ?, ?) ON CONFLICT(setting_key) DO UPDATE SET "
+                "value_json=excluded.value_json, updated_at=excluded.updated_at",
+                (key, json.dumps(value, ensure_ascii=False), now),
+            )
+            connection.commit()
 
     @staticmethod
     def _row_to_chunk(row: sqlite3.Row) -> DocumentChunk:

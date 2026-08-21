@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from src.api.schemas import (
     ModelProfileInput,
     ProviderInput,
+    RetrievalConfigInput,
     RunRequest,
     SessionUpdate,
 )
@@ -185,6 +186,17 @@ def create_app(
             )
             return {"ok": True, "response": text[:100]}
         except Exception as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.get("/api/retrieval/config")
+    def get_retrieval_config() -> dict:
+        return rag_service.orchestrator.retrieval_settings()
+
+    @app.patch("/api/retrieval/config")
+    def update_retrieval_config(payload: RetrievalConfigInput) -> dict:
+        try:
+            return rag_service.orchestrator.configure_retrieval(payload.model_dump())
+        except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
 
     @app.get("/api/documents")

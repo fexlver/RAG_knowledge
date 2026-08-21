@@ -79,19 +79,22 @@ def test_rag_stream_emits_structured_stages_and_sanitized_answer(tmp_path):
     )
 
     events = list(service.ask_stream("问题", "session-1"))
-    stages = [item["data"]["stage"] for item in events if item["type"] == "trace"]
+    trace_events = [item["data"] for item in events if item["type"] == "trace"]
     event_types = [item["type"] for item in events]
     done = next(item["data"] for item in events if item["type"] == "done")
 
-    assert stages == [
-        "rewrite",
-        "route",
-        "retrieval",
-        "rerank",
-        "confidence",
-        "generation",
+    assert [(item["stage"], item["status"]) for item in trace_events] == [
+        ("rewrite", "running"),
+        ("rewrite", "completed"),
+        ("retrieval", "running"),
+        ("retrieval", "completed"),
+        ("confidence", "completed"),
+        ("generation", "running"),
+        ("generation", "completed"),
     ]
     assert event_types[-2:] == ["usage", "done"]
     assert done["usage"]["total_tokens"] == 15
     assert "[1]" in done["content"]
     assert "[16]" not in done["content"]
+    assert all(item["status"] == "completed" for item in done["trace"])
+    assert len({item["event_id"] for item in done["trace"]}) == len(done["trace"])

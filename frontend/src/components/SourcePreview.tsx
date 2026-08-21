@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, ExternalLink, FileSearch, FileText, X } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, ExternalLink, FileText, Minus, Plus, X } from "lucide-react";
 import type { PreviewData } from "../api";
 
 const PdfDocument = lazy(() => import("./PdfDocument"));
@@ -37,13 +37,21 @@ export function SourcePreview({ preview, onClose }: { preview: PreviewData; onCl
   const [width, setWidth] = useState(520);
   const [pages, setPages] = useState(1);
   const [page, setPage] = useState(preview.locator.page_number || 1);
+  const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
     if (!containerRef.current) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(300, entry.contentRect.width - 32)));
+    // 宽度取整且仅在变化时更新，避免亚像素尺寸或滚动条伸缩引发的重复渲染
+    const observer = new ResizeObserver(([entry]) => {
+      const next = Math.max(300, Math.round(entry.contentRect.width) - 32);
+      setWidth((prev) => (prev === next ? prev : next));
+    });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
+
+  // 稳定 rects 引用，避免父组件渲染时传入新数组导致 PDF 文本层重复重建
+  const rects = useMemo(() => preview.locator.rects ?? [], [preview]);
 
   const isPdf = preview.mime_type?.includes("pdf") || preview.file_name.toLowerCase().endsWith(".pdf");
   return (
@@ -53,7 +61,7 @@ export function SourcePreview({ preview, onClose }: { preview: PreviewData; onCl
           <FileText size={17} />
           <div>
             <strong>{preview.file_name}</strong>
-            <span>{isPdf ? `第 ${page} 页` : `第 ${preview.locator.start_line || "—"} 行附近`}</span>
+            <span>{isPdf ? `PDF · 第 ${page} 页 · 已高亮引用文字` : `TXT · 第 ${preview.locator.start_line || "—"} 行附近`}</span>
           </div>
         </div>
         <div className="preview-actions">
@@ -61,18 +69,14 @@ export function SourcePreview({ preview, onClose }: { preview: PreviewData; onCl
           <button onClick={onClose} title="关闭预览"><X size={18} /></button>
         </div>
       </header>
-      <div className="preview-match">
-        <span><FileSearch size={14} />引用定位</span>
-        <p>{preview.excerpt}</p>
-      </div>
       <div className="preview-body" ref={containerRef}>
         {isPdf ? (
           <Suspense fallback={<div className="preview-loading">正在载入 PDF 组件…</div>}>
             <PdfDocument
               fileUrl={preview.file_url}
               page={page}
-              width={width}
-              rects={preview.locator.rects || []}
+              width={Math.round(width * zoom)}
+              rects={rects}
               onPages={setPages}
             />
           </Suspense>
@@ -80,9 +84,16 @@ export function SourcePreview({ preview, onClose }: { preview: PreviewData; onCl
       </div>
       {isPdf && (
         <footer className="preview-pagination">
-          <button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))}><ChevronLeft size={16} /></button>
-          <span>{page} / {pages}</span>
-          <button disabled={page >= pages} onClick={() => setPage((value) => Math.min(pages, value + 1))}><ChevronRight size={16} /></button>
+          <div className="preview-control-group">
+            <button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} title="上一页"><ChevronLeft size={16} /></button>
+            <span>第 {page} / {pages} 页</span>
+            <button disabled={page >= pages} onClick={() => setPage((value) => Math.min(pages, value + 1))} title="下一页"><ChevronRight size={16} /></button>
+          </div>
+          <div className="preview-control-group zoom-controls">
+            <button disabled={zoom <= 0.8} onClick={() => setZoom((value) => Math.max(0.8, Number((value - 0.1).toFixed(1))))} title="缩小"><Minus size={15} /></button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button disabled={zoom >= 1.6} onClick={() => setZoom((value) => Math.min(1.6, Number((value + 0.1).toFixed(1))))} title="放大"><Plus size={15} /></button>
+          </div>
         </footer>
       )}
     </aside>

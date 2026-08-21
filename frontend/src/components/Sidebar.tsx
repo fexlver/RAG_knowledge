@@ -1,4 +1,4 @@
-import { BookOpen, Ellipsis, MessageSquarePlus, PanelLeftClose, PanelLeftOpen, Pencil, Settings2, Trash2, UserRound } from "lucide-react";
+import { BookOpen, Ellipsis, MessageSquarePlus, PanelLeftClose, PanelLeftOpen, Pencil, Settings2, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Session } from "../api";
@@ -73,8 +73,8 @@ export function Sidebar(props: SidebarProps) {
   return <>
     <aside className={`app-sidebar ${props.collapsed ? "collapsed" : ""}`}>
       <div className="sidebar-brand">
-        <div className="brand-mark">食</div>
-        <div className="brand-copy"><strong>食品安全知识库</strong><span>Agentic RAG Workbench</span></div>
+        <div className="brand-mark"><ShieldCheck size={18} strokeWidth={1.8} /></div>
+        <div className="brand-copy"><strong>食品安全智库</strong><span>可信检索 · 原文追溯</span></div>
         <button className="sidebar-toggle" onClick={props.onToggleCollapsed} title={props.collapsed ? "展开侧栏" : "收起侧栏"} aria-label={props.collapsed ? "展开侧栏" : "收起侧栏"}>{props.collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</button>
       </div>
       <button className="new-chat" onClick={props.onNew} aria-label="新建对话" title="新建对话"><MessageSquarePlus size={17} /><span>新建对话</span></button>

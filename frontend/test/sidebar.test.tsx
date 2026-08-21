@@ -31,6 +31,12 @@ function renderSidebar() {
 }
 
 describe("Sidebar", () => {
+  it("展示克制的知识库品牌信息", () => {
+    renderSidebar();
+    expect(screen.getByText("食品安全智库")).toBeInTheDocument();
+    expect(screen.getByText("可信检索 · 原文追溯")).toBeInTheDocument();
+  });
+
   it("支持通过会话右键菜单重命名", async () => {
     const { onRename } = renderSidebar();
     const row = screen.getByText(session.title).closest(".session-row");
