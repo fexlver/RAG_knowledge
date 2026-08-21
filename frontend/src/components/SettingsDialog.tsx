@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Database, KeyRound, Loader2, Moon, Plus, Search, ServerCog, Sparkles, Sun, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type ModelProfile, type Provider, type RetrievalConfig, type RetrievalSettings, type ThemeMode } from "../api";
 
 interface Props {
@@ -22,6 +22,9 @@ export function SettingsDialog(props: Props) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [retrievalForm, setRetrievalForm] = useState<RetrievalConfig>(() => props.retrieval?.config || { retriever_ids: ["dense", "lexical"], fusion_id: "rrf", rerank_enabled: true });
+
+  // 每次打开设置时清空上一轮的保存提示，避免旧 notice 留存到下次打开
+  useEffect(() => { if (props.open) setNotice(""); }, [props.open]);
 
   const saveProvider = async () => {
     setBusy(true); setNotice("");
