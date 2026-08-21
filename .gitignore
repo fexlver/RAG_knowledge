@@ -27,6 +27,7 @@ output/playwright/*.log
 langchain_milvus_ops.py
 corpus/raw/
 corpus/cache/
+corpus/*.log
 .venv-docling/
 output/docling-spike*/
 output/*.log
