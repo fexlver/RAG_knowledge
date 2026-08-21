@@ -48,6 +48,8 @@ class Settings:
     embedding_batch_size: int
     citation_limit: int
     history_message_limit: int
+    # 带默认值，方便测试直接构造 Settings 而不必关心解析器选择。
+    pdf_parser: str = "pymupdf_text"
 
     @property
     def milvus_uri(self) -> str:
@@ -88,6 +90,7 @@ class Settings:
             rerank_min_score=_to_float("RERANK_MIN_SCORE", 0.15),
             chunk_size=_to_int("CHUNK_SIZE", 500),
             chunk_overlap=_to_int("CHUNK_OVERLAP", 100),
+            pdf_parser=os.getenv("PDF_PARSER", "pymupdf_text").strip().lower(),
             max_agent_steps=_to_int("MAX_AGENT_STEPS", 4),
             embedding_batch_size=_to_int("EMBEDDING_BATCH_SIZE", 10),
             citation_limit=_to_int("CITATION_LIMIT", 5),

@@ -34,7 +34,7 @@ def test_ingestion_uses_hash_to_avoid_duplicate_embedding(tmp_path):
     model = FakeModel()
     vector_store = FakeVectorStore()
     settings = SimpleNamespace(
-        chunk_size=50, chunk_overlap=10, upload_dir=tmp_path / "uploads"
+        chunk_size=50, chunk_overlap=10, upload_dir=tmp_path / "uploads", pdf_parser="pymupdf_text"
     )
     service = DocumentIngestionService(store, vector_store, model, settings)
 
@@ -63,7 +63,7 @@ def test_same_name_can_keep_version_history_and_restore_old_version(tmp_path):
     model = FakeModel()
     vector_store = FakeVectorStore()
     settings = SimpleNamespace(
-        chunk_size=50, chunk_overlap=10, upload_dir=tmp_path / "uploads"
+        chunk_size=50, chunk_overlap=10, upload_dir=tmp_path / "uploads", pdf_parser="pymupdf_text"
     )
     service = DocumentIngestionService(store, vector_store, model, settings)
 

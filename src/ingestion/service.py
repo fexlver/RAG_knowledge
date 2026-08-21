@@ -109,7 +109,15 @@ class DocumentIngestionService:
         if duplicate_mode not in {"skip", "overwrite"}:
             raise ValueError("duplicate_mode 仅支持 skip 或 overwrite。")
 
-        parsed_document = parse_structured_document(file_path)
+        # 解析器开关仅针对 PDF：其他类型始终按扩展名自动路由。
+        parser_name = (
+            self.settings.pdf_parser or None
+            if file_path.suffix.lower() == ".pdf"
+            else None
+        )
+        parsed_document = parse_structured_document(
+            file_path, parser_name=parser_name
+        )
         if not parsed_document.pages:
             raise ValueError(f"文档没有可提取文本：{file_path.name}")
         full_text = parsed_document.content

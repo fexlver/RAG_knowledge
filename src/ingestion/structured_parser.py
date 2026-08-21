@@ -221,9 +221,34 @@ class ParserRegistry:
     def register(self, parser: DocumentParser) -> None:
         self._parsers.insert(0, parser)
 
-    def parse(self, path: str | Path) -> ParsedDocument:
+    def _load_docling(self) -> DocumentParser:
+        """Docling 依赖较重，仅在显式选择时才导入并注册。"""
+
+        from src.ingestion.docling_parser import DoclingParser
+
+        parser = DoclingParser()
+        self.register(parser)
+        return parser
+
+    def parse(self, path: str | Path, parser_name: str | None = None) -> ParsedDocument:
         file_path = Path(path)
-        parser = next((item for item in self._parsers if item.supports(file_path)), None)
+        if parser_name:
+            parser = next(
+                (item for item in self._parsers if item.name == parser_name), None
+            )
+            if parser is None and parser_name == "docling":
+                parser = self._load_docling()
+            if parser is None:
+                available = ", ".join(item.name for item in self._parsers)
+                raise ValueError(f"未知解析器 {parser_name}，可用解析器: {available}")
+            if not parser.supports(file_path):
+                raise ValueError(
+                    f"解析器 {parser_name} 不支持 {file_path.suffix.lower()} 文件。"
+                )
+            return parser.parse(file_path)
+        parser = next(
+            (item for item in self._parsers if item.supports(file_path)), None
+        )
         if not parser:
             raise ValueError(f"暂不支持的文档类型: {file_path.suffix.lower()}")
         return parser.parse(file_path)
@@ -232,8 +257,10 @@ class ParserRegistry:
 DEFAULT_PARSER_REGISTRY = ParserRegistry()
 
 
-def parse_structured_document(path: str | Path) -> ParsedDocument:
+def parse_structured_document(
+    path: str | Path, parser_name: str | None = None
+) -> ParsedDocument:
     """解析并返回结构化中间表示；新代码应优先使用此函数。"""
 
-    return DEFAULT_PARSER_REGISTRY.parse(path)
+    return DEFAULT_PARSER_REGISTRY.parse(path, parser_name=parser_name)
 
