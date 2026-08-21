@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 from src.api.app import create_app
+from src.domain.models import DocumentChunk, DocumentMetadata
 from src.models.credentials import MemoryCredentialStore
 from src.storage.sqlite_store import SQLiteStore
 
@@ -135,3 +136,54 @@ def test_retrieval_pipeline_configuration_api(tmp_path):
         "fusion_id": "rrf",
         "rerank_enabled": False,
     }
+
+
+def test_document_preview_returns_small_structured_evidence_window(tmp_path):
+    client, store = make_client(tmp_path)
+    metadata = DocumentMetadata(source="法规.txt", content_hash="d" * 64)
+    chunk = DocumentChunk(
+        chunk_id="chunk-1",
+        doc_id="doc-1",
+        content="命中段落",
+        chunk_index=0,
+        page_number=None,
+        section="第一章",
+        metadata=metadata,
+        locator={"element_ids": ["e2"], "heading_path": ["第一章"]},
+    )
+    upload_dir = tmp_path / "uploads" / "doc-1"
+    upload_dir.mkdir(parents=True)
+    (upload_dir / "法规.txt").write_text("原文", encoding="utf-8")
+    (upload_dir / "layout.json").write_text(
+        json.dumps(
+            {
+                "elements": [
+                    {"element_id": "e1", "kind": "heading", "content": "第一章"},
+                    {"element_id": "e2", "kind": "paragraph", "content": "命中段落"},
+                    {"element_id": "e3", "kind": "paragraph", "content": "相邻段落"},
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    store.save_document(
+        "doc-1",
+        metadata,
+        [chunk],
+        storage_path="doc-1/法规.txt",
+        canonical_path="doc-1/canonical.md",
+        layout_path="doc-1/layout.json",
+    )
+
+    response = client.get("/api/documents/doc-1/preview?chunk_id=chunk-1")
+
+    assert response.status_code == 200
+    evidence = response.json()["evidence"]
+    assert evidence["degraded"] is False
+    assert [item["content"] for item in evidence["elements"]] == [
+        "第一章",
+        "命中段落",
+        "相邻段落",
+    ]
+    assert evidence["elements"][1]["matched"] is True

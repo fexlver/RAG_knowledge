@@ -49,6 +49,11 @@ def test_ingestion_uses_hash_to_avoid_duplicate_embedding(tmp_path):
     assert stored is not None
     assert stored["storage_path"]
     assert (settings.upload_dir / stored["storage_path"]).is_file()
+    assert stored["parser_name"] == "plain_text"
+    assert stored["canonical_path"]
+    assert stored["layout_path"]
+    assert (settings.upload_dir / stored["canonical_path"]).is_file()
+    assert (settings.upload_dir / stored["layout_path"]).is_file()
 
 
 def test_same_name_can_keep_version_history_and_restore_old_version(tmp_path):

@@ -11,8 +11,9 @@ from typing import Protocol
 
 from src.config.settings import Settings
 from src.domain.models import DocumentChunk
+from src.ingestion.artifacts import persist_artifacts
 from src.ingestion.metadata import extract_metadata
-from src.ingestion.parser import parse_document
+from src.ingestion.parser import parse_structured_document
 from src.ingestion.splitter import build_chunks, calculate_file_hash
 from src.storage.sqlite_store import SQLiteStore
 
@@ -70,6 +71,8 @@ class DocumentIngestionService:
         return target, target.relative_to(upload_root).as_posix()
 
     def _delete_stored_file(self, storage_path: str | None) -> None:
+        """删除原文件及当前版本已知的结构化派生产物。"""
+
         if not storage_path:
             return
         upload_root = Path(self.settings.upload_dir).resolve()
@@ -78,6 +81,11 @@ class DocumentIngestionService:
             raise ValueError("拒绝删除上传目录之外的文件。")
         if target.is_file():
             target.unlink()
+        # 仅清理本版本固定命名的两个产物，避免影响未来扩展文件或其他数据。
+        for artifact_name in ("canonical.md", "layout.json"):
+            artifact = target.parent / artifact_name
+            if artifact.is_file():
+                artifact.unlink()
         if target.parent != upload_root and target.parent.is_dir():
             try:
                 target.parent.rmdir()
@@ -101,14 +109,19 @@ class DocumentIngestionService:
         if duplicate_mode not in {"skip", "overwrite"}:
             raise ValueError("duplicate_mode 仅支持 skip 或 overwrite。")
 
-        pages = parse_document(file_path)
-        if not pages:
+        parsed_document = parse_structured_document(file_path)
+        if not parsed_document.pages:
             raise ValueError(f"文档没有可提取文本：{file_path.name}")
-        full_text = "\n".join(page.content for page in pages)
+        full_text = parsed_document.content
         metadata = extract_metadata(file_path.name, full_text, content_hash)
         chunks = build_chunks(
-            pages, metadata, self.settings.chunk_size, self.settings.chunk_overlap
+            parsed_document,
+            metadata,
+            self.settings.chunk_size,
+            self.settings.chunk_overlap,
         )
+        if not chunks:
+            raise ValueError(f"文档没有可索引的结构化文本：{file_path.name}")
         embeddings = self.model.embed_documents([chunk.content for chunk in chunks])
         doc_id = content_hash[:32]
         series_id = (
@@ -119,19 +132,26 @@ class DocumentIngestionService:
         version_number = (
             self.sqlite_store.next_document_version(series_id) if old_document else 1
         )
-        stored_path: Path | None = None
+        stored_relative_path: str | None = None
         try:
             self.vector_store.add(chunks, embeddings)
-            stored_path, relative_path = self._persist_original(file_path, doc_id)
+            _, stored_relative_path = self._persist_original(file_path, doc_id)
+            canonical_path, layout_path = persist_artifacts(
+                parsed_document, Path(self.settings.upload_dir), doc_id
+            )
             self.sqlite_store.save_document(
                 doc_id,
                 metadata,
                 chunks,
-                storage_path=relative_path,
+                storage_path=stored_relative_path,
                 mime_type=mimetypes.guess_type(file_path.name)[0],
                 series_id=series_id,
                 version_number=version_number,
                 file_size=file_path.stat().st_size,
+                parser_name=parsed_document.parser_name,
+                parser_version=parsed_document.parser_version,
+                canonical_path=canonical_path,
+                layout_path=layout_path,
             )
         except Exception:
             # 两个存储不支持分布式事务，尽最大努力清理本次写入。
@@ -139,8 +159,8 @@ class DocumentIngestionService:
                 self.vector_store.delete_document(doc_id)
             finally:
                 self.sqlite_store.delete_document(doc_id)
-                if stored_path and stored_path.is_file():
-                    stored_path.unlink()
+                if stored_relative_path:
+                    self._delete_stored_file(stored_relative_path)
             raise
 
         if old_document and duplicate_mode == "overwrite":

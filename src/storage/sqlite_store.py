@@ -52,7 +52,11 @@ class SQLiteStore:
             series_id TEXT,
             version_number INTEGER NOT NULL DEFAULT 1,
             is_current INTEGER NOT NULL DEFAULT 1,
-            file_size INTEGER NOT NULL DEFAULT 0
+            file_size INTEGER NOT NULL DEFAULT 0,
+            parser_name TEXT,
+            parser_version TEXT,
+            canonical_path TEXT,
+            layout_path TEXT
         );
         CREATE TABLE IF NOT EXISTS chunks (
             chunk_id TEXT PRIMARY KEY,
@@ -139,6 +143,10 @@ class SQLiteStore:
             self._ensure_column(
                 connection, "documents", "file_size", "INTEGER NOT NULL DEFAULT 0"
             )
+            self._ensure_column(connection, "documents", "parser_name", "TEXT")
+            self._ensure_column(connection, "documents", "parser_version", "TEXT")
+            self._ensure_column(connection, "documents", "canonical_path", "TEXT")
+            self._ensure_column(connection, "documents", "layout_path", "TEXT")
             # 旧数据在迁移后各自形成一条独立版本链，不影响既有索引。
             connection.execute(
                 "UPDATE documents SET series_id = doc_id WHERE series_id IS NULL OR series_id = ''"
@@ -199,6 +207,10 @@ class SQLiteStore:
         version_number: int = 1,
         is_current: bool = True,
         file_size: int = 0,
+        parser_name: str | None = None,
+        parser_version: str | None = None,
+        canonical_path: str | None = None,
+        layout_path: str | None = None,
     ) -> None:
         """在一个事务中保存文档及其关键词索引。"""
 
@@ -209,8 +221,9 @@ class SQLiteStore:
             connection.execute(
                 "INSERT INTO documents "
                 "(doc_id, file_name, content_hash, metadata_json, created_at, storage_path, "
-                "mime_type, series_id, version_number, is_current, file_size) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "mime_type, series_id, version_number, is_current, file_size, parser_name, "
+                "parser_version, canonical_path, layout_path) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     doc_id,
                     metadata.source,
@@ -223,6 +236,10 @@ class SQLiteStore:
                     version_number,
                     int(is_current),
                     max(0, file_size),
+                    parser_name,
+                    parser_version,
+                    canonical_path,
+                    layout_path,
                 ),
             )
             for chunk in chunk_list:
@@ -280,7 +297,8 @@ class SQLiteStore:
             rows = connection.execute(
                 "SELECT d.doc_id, d.file_name, d.content_hash, d.metadata_json, d.created_at, "
                 "d.storage_path, d.mime_type, d.series_id, d.version_number, d.is_current, "
-                "d.file_size, COUNT(c.chunk_id) AS chunk_count, "
+                "d.file_size, d.parser_name, d.parser_version, d.canonical_path, d.layout_path, "
+                "COUNT(c.chunk_id) AS chunk_count, "
                 "(SELECT COUNT(*) FROM documents v WHERE v.series_id = d.series_id) AS version_count "
                 "FROM documents d LEFT JOIN chunks c ON c.doc_id = d.doc_id "
                 f"{where} GROUP BY d.doc_id ORDER BY d.created_at DESC"

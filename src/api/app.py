@@ -301,6 +301,57 @@ def create_app(
             raise HTTPException(status_code=404, detail="原文件不存在。")
         return document, file_path
 
+    def evidence_window(document: dict, chunk: dict, radius: int = 1) -> dict:
+        """只返回命中结构单元及其邻居，避免预览接口回传整篇文档。"""
+
+        fallback = {
+            "heading_path": chunk["locator"].get("heading_path", []),
+            "elements": [
+                {
+                    "kind": "paragraph",
+                    "content": chunk["content"],
+                    "matched": True,
+                }
+            ],
+            "degraded": True,
+        }
+        layout_path = document.get("layout_path")
+        if not layout_path:
+            return fallback
+        root = app_settings.upload_dir.resolve()
+        path = (root / layout_path).resolve()
+        if root not in path.parents or not path.is_file():
+            return fallback
+        try:
+            layout = json.loads(path.read_text(encoding="utf-8"))
+            elements = layout.get("elements", [])
+            wanted = set(chunk["locator"].get("element_ids", []))
+            matched_indexes = [
+                index
+                for index, element in enumerate(elements)
+                if element.get("element_id") in wanted
+            ]
+            if not matched_indexes:
+                return fallback
+            start = max(0, min(matched_indexes) - radius)
+            end = min(len(elements), max(matched_indexes) + radius + 1)
+            return {
+                "heading_path": elements[min(matched_indexes)].get("heading_path", []),
+                "elements": [
+                    {
+                        "element_id": element.get("element_id"),
+                        "kind": element.get("kind"),
+                        "content": element.get("content", ""),
+                        "page_number": element.get("page_number"),
+                        "matched": element.get("element_id") in wanted,
+                    }
+                    for element in elements[start:end]
+                ],
+                "degraded": False,
+            }
+        except (OSError, ValueError, TypeError):
+            return fallback
+
     @app.get("/api/documents/{doc_id}/file")
     def document_file(doc_id: str) -> FileResponse:
         document, file_path = resolve_document_path(doc_id)
@@ -325,6 +376,7 @@ def create_app(
             "file_url": f"/api/documents/{doc_id}/file",
             "excerpt": chunk["content"],
             "locator": chunk["locator"],
+            "evidence": evidence_window(document, chunk),
         }
 
     @app.exception_handler(KeyError)
