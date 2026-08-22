@@ -1,1 +1,1 @@
-"""食品安全Agentic RAG核心包。"""
+"""年报 Agentic RAG 核心包。"""

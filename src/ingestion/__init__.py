@@ -1,4 +1,4 @@
-"""食品安全文档入库模块。"""
+"""文档入库模块。"""
 
 from .parser import ParsedPage, parse_document
 from .splitter import build_chunks, calculate_file_hash

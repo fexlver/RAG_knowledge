@@ -1,4 +1,4 @@
-"""食品安全知识库领域模型。"""
+"""知识库领域模型。"""
 
 from __future__ import annotations
 

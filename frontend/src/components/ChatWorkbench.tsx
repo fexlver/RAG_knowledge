@@ -47,7 +47,7 @@ function AssistantMessage() {
   const text = useAuiState((state) => state.message.content.filter((part) => part.type === "text").map((part) => part.type === "text" ? part.text : "").join(""));
   const messageId = useAuiState((state) => state.message.id);
   return <MessagePrimitive.Root className="message assistant-message">
-    <div className="assistant-avatar">食</div>
+    <div className="assistant-avatar">报</div>
     <div className="assistant-content">
       <MessagePrimitive.Content components={{ Text: CitationMarkdown }} />
       {custom?.error && <p className="message-error">{custom.error}</p>}
@@ -118,11 +118,11 @@ export function ChatWorkbench(props: Props) {
   return <ChatUiContext.Provider value={{ onCitation: props.onCitation }}>
     <AssistantRuntimeProvider runtime={runtime}>
       <main className="chat-workbench">
-        <header className="chat-header"><div><strong>{props.session?.title || "新对话"}</strong><span>食品安全资料检索助手</span></div><div className={`run-indicator ${props.running ? "running" : ""}`}>{props.running ? <><Loader2 size={13} className="spin" />正在执行</> : "就绪"}</div></header>
+        <header className="chat-header"><div><strong>{props.session?.title || "新对话"}</strong><span>年报检索分析助手</span></div><div className={`run-indicator ${props.running ? "running" : ""}`}>{props.running ? <><Loader2 size={13} className="spin" />正在执行</> : "就绪"}</div></header>
         <ThreadPrimitive.Root className="thread-root">
           <div className="thread-scroll-region">
             <ThreadPrimitive.Viewport className="thread-viewport">
-              <ThreadPrimitive.Empty><div className="welcome"><div className="welcome-mark">食</div><h1>今天想查询什么食品安全资料？</h1><p>我会执行混合检索、重排序与置信控制，并将每项关键结论链接到原始文件。</p><div className="suggestions"><ThreadPrimitive.Suggestion prompt="GB 2760 的适用范围是什么？">查询标准适用范围</ThreadPrimitive.Suggestion><ThreadPrimitive.Suggestion prompt="比较同一标准的新旧版本差异">比较标准版本差异</ThreadPrimitive.Suggestion><ThreadPrimitive.Suggestion prompt="当前知识库有哪些现行标准？">检查标准有效性</ThreadPrimitive.Suggestion></div></div></ThreadPrimitive.Empty>
+              <ThreadPrimitive.Empty><div className="welcome"><div className="welcome-mark">报</div><h1>今天想查询哪份年报的数据？</h1><p>我会执行混合检索、重排序与置信控制，并将每项关键结论链接到原始文件。</p><div className="suggestions"><ThreadPrimitive.Suggestion prompt="东吴证券2023年的营业收入和净利润分别是多少？">查询财务数据</ThreadPrimitive.Suggestion><ThreadPrimitive.Suggestion prompt="公司近三年主要会计数据有什么变化？">对比财务指标</ThreadPrimitive.Suggestion><ThreadPrimitive.Suggestion prompt="公司年报里提到的主要风险因素有哪些？">查看风险提示</ThreadPrimitive.Suggestion></div></div></ThreadPrimitive.Empty>
               <ThreadPrimitive.Messages components={messageComponents} />
               <ThreadPrimitive.ScrollToBottom className="scroll-bottom"><ArrowDown size={16} /></ThreadPrimitive.ScrollToBottom>
             </ThreadPrimitive.Viewport>
@@ -130,7 +130,7 @@ export function ChatWorkbench(props: Props) {
           <div className="composer-dock">
             <div className="composer-footer">
               <ComposerPrimitive.Root className="composer-root">
-                <ComposerPrimitive.Input className="composer-input" placeholder="询问食品安全标准、法规或公告…" rows={2} />
+                <ComposerPrimitive.Input className="composer-input" placeholder="询问年报财务数据、股东信息或风险提示…" rows={2} />
                 <div className="composer-toolbar">
                   <ModelPicker models={props.models} selectedId={selectedModel} onSelect={props.onModel} />
                   <div className="token-usage" title="当前会话累计 Token"><span>{props.sessionTotal?.toLocaleString() ?? "—"} tokens</span></div>

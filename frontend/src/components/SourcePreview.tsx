@@ -54,6 +54,10 @@ export function SourcePreview({ preview, onClose }: { preview: PreviewData; onCl
   const rects = useMemo(() => preview.locator.rects ?? [], [preview]);
 
   const isPdf = preview.mime_type?.includes("pdf") || preview.file_name.toLowerCase().endsWith(".pdf");
+  const citationPage = preview.locator.page_number ?? null;
+  const pageHint = citationPage == null || page === citationPage
+    ? "已高亮引用文字"
+    : `引用在第 ${citationPage} 页`;
   return (
     <aside className="source-preview" aria-label="原文预览">
       <header className="preview-header">
@@ -61,7 +65,7 @@ export function SourcePreview({ preview, onClose }: { preview: PreviewData; onCl
           <FileText size={17} />
           <div>
             <strong>{preview.file_name}</strong>
-            <span>{isPdf ? `PDF · 第 ${page} 页 · 已高亮引用文字` : `TXT · 第 ${preview.locator.start_line || "—"} 行附近`}</span>
+            <span>{isPdf ? `PDF · 第 ${page} 页 · ${pageHint}` : `TXT · 第 ${preview.locator.start_line || "-"} 行附近`}</span>
           </div>
         </div>
         <div className="preview-actions">
@@ -77,6 +81,7 @@ export function SourcePreview({ preview, onClose }: { preview: PreviewData; onCl
               page={page}
               width={Math.round(width * zoom)}
               rects={rects}
+              rectsPage={preview.locator.page_number ?? null}
               onPages={setPages}
             />
           </Suspense>

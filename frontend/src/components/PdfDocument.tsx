@@ -11,10 +11,12 @@ interface Props {
   page: number;
   width: number;
   rects: number[][];
+  /** rects 所属的页码；翻到其他页时高亮必须清除，否则同位置的文字会被误标。 */
+  rectsPage: number | null;
   onPages: (pages: number) => void;
 }
 
-export default function PdfDocument({ fileUrl, page, width, rects, onPages }: Props) {
+export default function PdfDocument({ fileUrl, page, width, rects, rectsPage, onPages }: Props) {
   const pageRef = useRef<HTMLDivElement>(null);
 
   const highlightTextLines = useCallback(() => {
@@ -22,6 +24,7 @@ export default function PdfDocument({ fileUrl, page, width, rects, onPages }: Pr
     if (!root || !rects.length) return;
     const pageBox = root.getBoundingClientRect();
     if (!pageBox.width || !pageBox.height) return;
+    const active = rectsPage == null || page === rectsPage;
     const textSpans = root.querySelectorAll<HTMLElement>(".react-pdf__Page__textContent span");
     textSpans.forEach((span) => {
       const box = span.getBoundingClientRect();
@@ -31,7 +34,7 @@ export default function PdfDocument({ fileUrl, page, width, rects, onPages }: Pr
         (box.right - pageBox.left) / pageBox.width,
         (box.bottom - pageBox.top) / pageBox.height,
       ];
-      const matches = rects.some((rect) => (
+      const matches = active && rects.some((rect) => (
         normalized[2] > rect[0]
         && normalized[0] < rect[2]
         && normalized[3] > rect[1]
@@ -40,7 +43,7 @@ export default function PdfDocument({ fileUrl, page, width, rects, onPages }: Pr
       // toggle 只在命中状态变化时触碰 DOM；先 remove 再 add 会持续触发样式失效
       span.classList.toggle("citation-text-hit", matches);
     });
-  }, [rects]);
+  }, [rects, rectsPage, page]);
 
   // react-pdf 把该回调列入文本层重建依赖：内联函数 + setState 会形成
   // “文本层重建 → 回调触发 → 再重建”的循环，高亮类名被反复擦除，表现为持续闪烁。

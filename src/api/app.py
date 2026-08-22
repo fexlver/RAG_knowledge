@@ -1,4 +1,4 @@
-"""食品安全 RAG 的 FastAPI 应用。"""
+"""年报知识库 RAG 的 FastAPI 应用。"""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ def create_app(
     credential_store = credentials or SystemCredentialStore()
     rag_service = service or build_service(app_settings, credential_store)
     store = rag_service.sqlite_store
-    app = FastAPI(title="食品安全知识库问答系统", version="0.3.0")
+    app = FastAPI(title="年报知识库问答系统", version="0.3.0")
     app.state.rag_service = rag_service
     app.state.settings = app_settings
     app.state.credentials = credential_store

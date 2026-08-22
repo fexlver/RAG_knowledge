@@ -74,7 +74,7 @@ export function Sidebar(props: SidebarProps) {
     <aside className={`app-sidebar ${props.collapsed ? "collapsed" : ""}`}>
       <div className="sidebar-brand">
         <div className="brand-mark"><ShieldCheck size={18} strokeWidth={1.8} /></div>
-        <div className="brand-copy"><strong>食品安全智库</strong><span>可信检索 · 原文追溯</span></div>
+        <div className="brand-copy"><strong>年报智库</strong><span>可信检索 · 原文追溯</span></div>
         <button className="sidebar-toggle" onClick={props.onToggleCollapsed} title={props.collapsed ? "展开侧栏" : "收起侧栏"} aria-label={props.collapsed ? "展开侧栏" : "收起侧栏"}>{props.collapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}</button>
       </div>
       <button className="new-chat" onClick={props.onNew} aria-label="新建对话" title="新建对话"><MessageSquarePlus size={17} /><span>新建对话</span></button>

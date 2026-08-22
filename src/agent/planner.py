@@ -1,4 +1,4 @@
-"""食品安全问题查询规划器。"""
+"""年报问题查询规划器。"""
 
 from __future__ import annotations
 

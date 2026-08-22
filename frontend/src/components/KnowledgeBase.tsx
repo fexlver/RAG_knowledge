@@ -121,7 +121,7 @@ export function KnowledgeBase({ documents, onRefresh }: Props) {
 
   return <main className="knowledge-page">
     <header className="page-heading">
-      <div><span className="eyebrow">KNOWLEDGE BASE</span><h1>知识库管理</h1><p>管理食品安全标准、法规与公告的入库、版本和检索状态。</p></div>
+      <div><span className="eyebrow">KNOWLEDGE BASE</span><h1>知识库管理</h1><p>管理上市公司年报语料的入库、版本和检索状态。</p></div>
       <button className="secondary-button" onClick={refreshAll}><RefreshCw size={16} />刷新数据</button>
     </header>
 
@@ -164,13 +164,13 @@ export function KnowledgeBase({ documents, onRefresh }: Props) {
       </section>
 
       <section className="document-section">
-        <div className="document-toolbar"><div className="section-title"><div><FileArchive size={19} /><div><h2>已入库文档</h2><p>列表仅展示当前检索版本，展开可管理历史版本。</p></div></div></div><label className="document-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索文件名、标准号或类型" /></label></div>
+        <div className="document-toolbar"><div className="section-title"><div><FileArchive size={19} /><div><h2>已入库文档</h2><p>列表仅展示当前检索版本，展开可管理历史版本。</p></div></div></div><label className="document-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索文件名或类型" /></label></div>
         <div className="document-table-wrap"><table className="document-table">
-          <thead><tr><th>文件</th><th>标准信息</th><th>索引</th><th>当前版本</th><th>入库时间</th><th>操作</th></tr></thead>
+          <thead><tr><th>文件</th><th>文档信息</th><th>索引</th><th>当前版本</th><th>入库时间</th><th>操作</th></tr></thead>
           <tbody>{filtered.map((document) => <Fragment key={document.doc_id}>
             <tr key={document.doc_id}>
               <td><div className="document-name"><button title="展开版本历史" onClick={() => toggleVersions(document)}>{expanded === document.series_id ? <ChevronDown size={17} /> : <ChevronRight size={17} />}</button><span><strong>{document.file_name}</strong><small>{formatSize(document.file_size)} · {document.mime_type || "未知类型"}</small></span></div></td>
-              <td><strong>{document.standard_code || "未识别标准号"}</strong><small>{document.document_type || "其他"} · {document.validity_status || "未知"}</small></td>
+              <td><strong>{document.standard_code || "年报语料"}</strong><small>{document.document_type || "其他"} · {document.validity_status || "未知"}</small></td>
               <td><strong>{Number(document.chunk_count || 0).toLocaleString()} 块</strong><small>{document.storage_path ? "原文可追溯" : "原文件缺失"}</small></td>
               <td><span className="version-badge">v{document.version_number || 1}</span><small>共 {document.version_count || 1} 版</small></td>
               <td>{new Date(document.created_at).toLocaleString("zh-CN")}</td>
