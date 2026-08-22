@@ -117,6 +117,36 @@ export interface OperationLog {
   created_at: string;
 }
 
+export type UploadStage =
+  | "queued"
+  | "parsing"
+  | "embedding"
+  | "writing"
+  | "success"
+  | "skipped"
+  | "failed";
+
+export interface UploadFileProgress {
+  name: string;
+  stage: UploadStage;
+  stage_label: string;
+  detail: string;
+  chunk_count: number;
+  parser: string;
+  duration_seconds: number;
+}
+
+export interface UploadJob {
+  job_id: string;
+  status: "running" | "done";
+  duplicate_mode: string;
+  created_at: number;
+  finished_at: number | null;
+  finished_files: number;
+  total_files: number;
+  files: UploadFileProgress[];
+}
+
 export interface PreviewData {
   doc_id: string;
   chunk_id: string;
@@ -184,10 +214,11 @@ export const api = {
     }),
   documents: () => request<DocumentRecord[]>("/api/documents"),
   uploadDocuments: (form: FormData, duplicateMode: string) =>
-    request<Array<{ file_name: string; status: string; chunk_count: number; detail: string }>>(
+    request<UploadJob>(
       `/api/documents?duplicate_mode=${encodeURIComponent(duplicateMode)}`,
       { method: "POST", body: form },
     ),
+  uploadJob: (jobId: string) => request<UploadJob>(`/api/documents/upload-jobs/${jobId}`),
   deleteDocument: (id: string) => request<void>(`/api/documents/${id}`, { method: "DELETE" }),
   documentVersions: (id: string) => request<DocumentRecord[]>(`/api/documents/${id}/versions`),
   activateDocument: (id: string) => request<DocumentRecord>(`/api/documents/${id}/activate`, { method: "POST" }),

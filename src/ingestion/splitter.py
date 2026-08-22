@@ -174,11 +174,64 @@ def _append_structured_chunk(
     )
 
 
+TABLE_SEPARATOR_PATTERN = re.compile(r"^\s*\|[\s:|-]+\|\s*$")
+
+
+def _split_long_table(element: DocumentElement, chunk_size: int) -> list[DocumentElement]:
+    """长表按行边界拆分，每个片段重复表头，保证片段脱离上下文也可读。"""
+
+    lines = element.content.splitlines()
+    header: list[str] = []
+    body_start = 0
+    for index, line in enumerate(lines):
+        if TABLE_SEPARATOR_PATTERN.match(line):
+            header = lines[: index + 1]
+            body_start = index + 1
+            break
+    if not header or body_start >= len(lines):
+        # 不是标准 markdown 表格时退回通用递归切分。
+        return []
+    header_text = "\n".join(header)
+    # 预算扣除表头，保证“表头 + 数据行”整体不超过 chunk_size。
+    budget = max(1, chunk_size - len(header_text) - 1)
+    fragments: list[str] = []
+    current: list[str] = []
+    current_size = 0
+    for line in lines[body_start:]:
+        line_size = len(line) + 1
+        if current and current_size + line_size > budget:
+            fragments.append("\n".join(header + current))
+            current = []
+            current_size = 0
+        current.append(line)
+        current_size += line_size
+    if current:
+        fragments.append("\n".join(header + current))
+    return [
+        DocumentElement(
+            element_id=f"{element.element_id}:{index}",
+            kind=element.kind,
+            content=fragment,
+            order=element.order,
+            page_number=element.page_number,
+            heading_path=element.heading_path,
+            heading_level=element.heading_level,
+            locator=element.locator,
+        )
+        for index, fragment in enumerate(fragments)
+        if fragment.strip()
+    ]
+
+
 def _split_long_element(
     element: DocumentElement, chunk_size: int, chunk_overlap: int
 ) -> list[DocumentElement]:
     """仅在单个段落超长时降级为递归切分，不破坏正常段落与章节。"""
 
+    if element.kind == "table":
+        table_fragments = _split_long_table(element, chunk_size)
+        if table_fragments:
+            return table_fragments
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,

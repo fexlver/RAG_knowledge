@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Activity, ArchiveRestore, ChevronDown, ChevronRight, Database, FileArchive, FileClock, FileUp, RefreshCw, Search, Trash2, UploadCloud, X } from "lucide-react";
-import { api, type DocumentRecord, type OperationLog } from "../api";
+import { api, type DocumentRecord, type OperationLog, type UploadJob } from "../api";
 
 interface Props {
   documents: DocumentRecord[];
@@ -23,7 +23,11 @@ export function KnowledgeBase({ documents, onRefresh }: Props) {
   const [logs, setLogs] = useState<OperationLog[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [versions, setVersions] = useState<Record<string, DocumentRecord[]>>({});
-  const [results, setResults] = useState<Array<{ file_name: string; status: string; chunk_count: number; detail: string }>>([]);
+  const [job, setJob] = useState<UploadJob | null>(null);
+  const [uploadError, setUploadError] = useState("");
+  const pollTimer = useRef<number | null>(null);
+
+  useEffect(() => () => { if (pollTimer.current !== null) window.clearInterval(pollTimer.current); }, []);
 
   const refreshLogs = async () => setLogs(await api.operationLogs());
   useEffect(() => {
@@ -41,16 +45,55 @@ export function KnowledgeBase({ documents, onRefresh }: Props) {
   const totalChunks = documents.reduce((sum, document) => sum + Number(document.chunk_count || 0), 0);
   const versionedCount = documents.filter((document) => Number(document.version_count || 1) > 1).length;
 
+  const fileMeta = (item: UploadJob["files"][number]) => {
+    if (item.stage === "success") {
+      const parts = [`${item.chunk_count} 个文本块`];
+      if (item.parser) parts.push(item.parser);
+      if (item.duration_seconds) parts.push(`${Math.round(item.duration_seconds)}s`);
+      if (item.detail) parts.push(item.detail);
+      return parts.join(" · ");
+    }
+    return item.detail;
+  };
+
+  const stopPolling = () => {
+    if (pollTimer.current !== null) {
+      window.clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    }
+  };
+
   const upload = async () => {
     if (!files.length) return;
     setBusy(true);
+    setUploadError("");
     try {
       const form = new FormData();
       files.forEach((file) => form.append("files", file));
-      setResults(await api.uploadDocuments(form, mode));
+      // 后台任务立即返回 job_id；之后轮询每个文件的阶段直到任务结束。
+      const started = await api.uploadDocuments(form, mode);
+      setJob(started);
       setFiles([]);
       if (inputRef.current) inputRef.current.value = "";
-      await refreshAll();
+      await new Promise<void>((resolve) => {
+        pollTimer.current = window.setInterval(async () => {
+          try {
+            const current = await api.uploadJob(started.job_id);
+            setJob(current);
+            if (current.status === "done") {
+              stopPolling();
+              await refreshAll();
+              resolve();
+            }
+          } catch {
+            // 轮询失败（任务过期/网络断开）不再重试，保留最后一次进度。
+            stopPolling();
+            resolve();
+          }
+        }, 1500);
+      });
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "上传失败，请重试。");
     } finally { setBusy(false); }
   };
   const remove = async (document: DocumentRecord) => {
@@ -96,7 +139,7 @@ export function KnowledgeBase({ documents, onRefresh }: Props) {
 
     {tab === "documents" ? <>
       <section className="upload-card">
-        <div className="section-title"><div><FileUp size={19} /><div><h2>文档入库</h2><p>支持 PDF/TXT，多文件上传会逐个解析并建立索引。</p></div></div></div>
+        <div className="section-title"><div><FileUp size={19} /><div><h2>文档入库</h2><p>支持 PDF/TXT，多文件在后台逐个解析并建立索引，进度实时可见。</p></div></div></div>
         <button className="upload-dropzone" onClick={() => inputRef.current?.click()}>
           <UploadCloud size={30} /><strong>选择或拖入待入库文件</strong><span>单击选择 PDF / TXT 文件；索引会保留页码、行号与段落定位。</span>
         </button>
@@ -106,7 +149,18 @@ export function KnowledgeBase({ documents, onRefresh }: Props) {
           <div className="duplicate-policy"><strong>同名文件策略</strong><label><input type="radio" checked={mode === "skip"} onChange={() => setMode("skip")} />跳过并提示</label><label><input type="radio" checked={mode === "overwrite"} onChange={() => setMode("overwrite")} />保存为新版本</label></div>
           <button className="primary-button" disabled={!files.length || busy} onClick={upload}><FileUp size={16} />{busy ? "正在处理…" : files.length ? `上传 ${files.length} 个文件` : "上传文件"}</button>
         </div>
-        {!!results.length && <div className="upload-results">{results.map((item, index) => <div key={`${item.file_name}-${index}`}><span className={`result-status ${item.status}`}>{item.status === "success" ? "成功" : item.status === "skipped" ? "跳过" : "失败"}</span><strong>{item.file_name}</strong><span>{item.chunk_count} 个文本块 · {item.detail}</span></div>)}</div>}
+        {job && <div className="upload-progress">
+          <div className="upload-progress-head">
+            <div className="upload-progress-track"><div className="upload-progress-fill" style={{ width: `${job.total_files ? Math.round((job.finished_files / job.total_files) * 100) : 0}%` }} /></div>
+            <span>{job.finished_files}/{job.total_files} 个文件{job.status === "running" ? " · 正在处理…" : " · 已完成"}</span>
+          </div>
+          <div className="upload-results">{job.files.map((item, index) => <div key={`${item.name}-${index}`}>
+            <span className={`stage-badge ${item.stage}`}>{item.stage_label}{["parsing", "embedding", "writing"].includes(item.stage) ? "…" : ""}</span>
+            <strong title={item.name}>{item.name}</strong>
+            <span className="upload-file-meta" title={fileMeta(item)}>{fileMeta(item) || "等待处理"}</span>
+          </div>)}</div>
+        </div>}
+        {uploadError && <p className="upload-error">{uploadError}</p>}
       </section>
 
       <section className="document-section">

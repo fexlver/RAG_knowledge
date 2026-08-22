@@ -1,17 +1,37 @@
 import json
+import time
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
 from src.api.app import create_app
 from src.domain.models import DocumentChunk, DocumentMetadata
+from src.ingestion.service import IngestionResult
 from src.models.credentials import MemoryCredentialStore
 from src.storage.sqlite_store import SQLiteStore
 
 
 class FakeIngestion:
+    def __init__(self):
+        self.calls: list[tuple[str, str]] = []
+
     def delete(self, _doc_id):
         return None
+
+    def ingest(self, path, duplicate_mode="skip", progress=None):
+        from pathlib import Path
+
+        self.calls.append((Path(path).name, duplicate_mode))
+        if progress:
+            progress("parsing", "正在解析文档（测试）")
+        return IngestionResult(
+            file_name=Path(path).name,
+            status="success",
+            chunk_count=3,
+            detail="入库完成",
+            parser="fake_parser",
+            duration_seconds=0.01,
+        )
 
 
 class FakeOrchestrator:
@@ -187,3 +207,44 @@ def test_document_preview_returns_small_structured_evidence_window(tmp_path):
         "相邻段落",
     ]
     assert evidence["elements"][1]["matched"] is True
+
+
+def test_upload_documents_runs_as_background_job(tmp_path):
+    client, _ = make_client(tmp_path)
+
+    response = client.post(
+        "/api/documents",
+        params={"duplicate_mode": "skip"},
+        files=[
+            ("files", ("标准.txt", "第1章 总则\n\n内容".encode("utf-8"), "text/plain")),
+            ("files", ("报表.docx", b"not supported", "application/octet-stream")),
+        ],
+    )
+
+    assert response.status_code == 202
+    job = response.json()
+    assert job["job_id"]
+    assert job["total_files"] == 2
+
+    deadline = time.monotonic() + 5
+    current = job
+    while time.monotonic() < deadline and current["status"] != "done":
+        time.sleep(0.05)
+        current = client.get(f"/api/documents/upload-jobs/{job['job_id']}").json()
+    assert current["status"] == "done"
+
+    by_name = {item["name"]: item for item in current["files"]}
+    assert by_name["标准.txt"]["stage"] == "success"
+    assert by_name["标准.txt"]["stage_label"] == "完成"
+    assert by_name["标准.txt"]["chunk_count"] == 3
+    assert by_name["标准.txt"]["parser"] == "fake_parser"
+    assert by_name["报表.docx"]["stage"] == "failed"
+    assert by_name["报表.docx"]["detail"] == "仅支持 PDF/TXT。"
+    assert current["finished_files"] == 2
+
+    # 临时上传文件处理完即清理。
+    leftovers = list((tmp_path / "uploads" / ".incoming").rglob("*"))
+    assert not [item for item in leftovers if item.is_file()]
+
+    unknown = client.get("/api/documents/upload-jobs/not-exist")
+    assert unknown.status_code == 404

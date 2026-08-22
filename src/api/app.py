@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 import uuid
 from collections.abc import Iterator
 from pathlib import Path
@@ -22,12 +23,23 @@ from src.api.schemas import (
     SessionUpdate,
 )
 from src.config.settings import Settings
+from src.ingestion.upload_jobs import FileProgress, UploadJobManager
 from src.models.credentials import CredentialStore, SystemCredentialStore
 from src.services.rag_service import FoodSafetyRAGService, build_service
 
 
 def _sse(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _remove_temporary(directory: Path) -> None:
+    try:
+        for item in directory.iterdir():
+            if item.is_file():
+                item.unlink()
+        directory.rmdir()
+    except OSError:
+        pass
 
 
 def _public_provider(provider: dict) -> dict:
@@ -54,6 +66,7 @@ def create_app(
     app.state.rag_service = rag_service
     app.state.settings = app_settings
     app.state.credentials = credential_store
+    app.state.upload_jobs = UploadJobManager()
 
     app.add_middleware(
         CORSMiddleware,
@@ -207,62 +220,64 @@ def create_app(
     def list_operation_logs(limit: int = 100) -> list[dict]:
         return store.list_logs(limit)
 
-    @app.post("/api/documents", status_code=201)
+    @app.post("/api/documents", status_code=202)
     async def upload_documents(
         files: Annotated[list[UploadFile], File()], duplicate_mode: str = "skip"
-    ) -> list[dict]:
+    ) -> dict:
         if duplicate_mode not in {"skip", "overwrite"}:
             raise HTTPException(status_code=422, detail="同名策略参数错误。")
         allowed = {".pdf", ".txt"}
-        results: list[dict] = []
         incoming = app_settings.upload_dir / ".incoming"
         incoming.mkdir(parents=True, exist_ok=True)
+        entries: list[FileProgress] = []
+        pairs: list[tuple[FileProgress, Path]] = []
         for upload in files:
             safe_name = Path(upload.filename or "document").name
             suffix = Path(safe_name).suffix.lower()
             if suffix not in allowed:
-                results.append(
-                    {
-                        "file_name": upload.filename,
-                        "status": "failed",
-                        "chunk_count": 0,
-                        "detail": "仅支持 PDF/TXT。",
-                    }
+                entries.append(
+                    FileProgress(
+                        name=safe_name,
+                        stage="failed",
+                        detail="仅支持 PDF/TXT。",
+                        chunk_count=0,
+                        finished_at=time.time(),
+                    )
                 )
+                await upload.close()
                 continue
-            temporary_path: Path | None = None
-            temporary_directory: Path | None = None
+            temporary_directory = Path(tempfile.mkdtemp(dir=incoming))
+            temporary_path = temporary_directory / safe_name
+            progress = FileProgress(name=safe_name)
             try:
-                temporary_directory = Path(tempfile.mkdtemp(dir=incoming))
-                temporary_path = temporary_directory / safe_name
                 with temporary_path.open("wb") as temporary:
                     while chunk := await upload.read(1024 * 1024):
                         temporary.write(chunk)
-                result = rag_service.ingestion.ingest(temporary_path, duplicate_mode)
-                results.append(
-                    {
-                        "file_name": result.file_name,
-                        "status": result.status,
-                        "chunk_count": result.chunk_count,
-                        "detail": result.detail,
-                    }
+                entries.append(progress)
+                pairs.append((progress, temporary_path))
+            except Exception as error:  # noqa: BLE001 - 保存失败仅影响当前文件
+                entries.append(
+                    FileProgress(
+                        name=safe_name,
+                        stage="failed",
+                        detail=f"保存上传文件失败：{error}",
+                        chunk_count=0,
+                        finished_at=time.time(),
+                    )
                 )
-            except Exception as error:  # noqa: BLE001
-                results.append(
-                    {
-                        "file_name": upload.filename,
-                        "status": "failed",
-                        "chunk_count": 0,
-                        "detail": str(error),
-                    }
-                )
+                _remove_temporary(temporary_directory)
             finally:
-                if temporary_path and temporary_path.is_file():
-                    temporary_path.unlink()
-                if temporary_directory and temporary_directory.is_dir():
-                    temporary_directory.rmdir()
                 await upload.close()
-        return results
+        job = app.state.upload_jobs.create_job(entries, duplicate_mode)
+        app.state.upload_jobs.start(job, pairs, rag_service.ingestion)
+        return job.to_dict()
+
+    @app.get("/api/documents/upload-jobs/{job_id}")
+    def get_upload_job(job_id: str) -> dict:
+        job = app.state.upload_jobs.get_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="上传任务不存在或已过期。")
+        return job.to_dict()
 
     @app.delete("/api/documents/{doc_id}", status_code=204)
     def delete_document(doc_id: str) -> None:

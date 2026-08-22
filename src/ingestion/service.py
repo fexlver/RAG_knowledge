@@ -5,6 +5,8 @@ from __future__ import annotations
 import mimetypes
 import os
 import shutil
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -16,6 +18,9 @@ from src.ingestion.metadata import extract_metadata
 from src.ingestion.parser import parse_structured_document
 from src.ingestion.splitter import build_chunks, calculate_file_hash
 from src.storage.sqlite_store import SQLiteStore
+
+# 进调进度回调：(阶段, 说明)。阶段固定为 parsing/embedding/writing。
+ProgressCallback = Callable[[str, str], None]
 
 
 class EmbeddingModel(Protocol):
@@ -36,6 +41,8 @@ class IngestionResult:
     status: str
     chunk_count: int
     detail: str
+    parser: str = ""
+    duration_seconds: float = 0.0
 
 
 class DocumentIngestionService:
@@ -92,7 +99,18 @@ class DocumentIngestionService:
             except OSError:
                 pass
 
-    def ingest(self, path: str | Path, duplicate_mode: str = "skip") -> IngestionResult:
+    def ingest(
+        self,
+        path: str | Path,
+        duplicate_mode: str = "skip",
+        progress: ProgressCallback | None = None,
+    ) -> IngestionResult:
+        started = time.monotonic()
+
+        def report(stage: str, detail: str) -> None:
+            if progress is not None:
+                progress(stage, detail)
+
         file_path = Path(path)
         content_hash = calculate_file_hash(file_path)
         existing_hash = self.sqlite_store.find_document_by_hash(content_hash)
@@ -115,6 +133,7 @@ class DocumentIngestionService:
             if file_path.suffix.lower() == ".pdf"
             else None
         )
+        report("parsing", f"正在解析文档（{parser_name or '自动选择'}）")
         parsed_document = parse_structured_document(
             file_path, parser_name=parser_name
         )
@@ -130,6 +149,7 @@ class DocumentIngestionService:
         )
         if not chunks:
             raise ValueError(f"文档没有可索引的结构化文本：{file_path.name}")
+        report("embedding", f"已切分 {len(chunks)} 块，正在生成向量")
         embeddings = self.model.embed_documents([chunk.content for chunk in chunks])
         doc_id = content_hash[:32]
         series_id = (
@@ -142,6 +162,7 @@ class DocumentIngestionService:
         )
         stored_relative_path: str | None = None
         try:
+            report("writing", "向量就绪，正在写入索引与原文")
             self.vector_store.add(chunks, embeddings)
             _, stored_relative_path = self._persist_original(file_path, doc_id)
             canonical_path, layout_path = persist_artifacts(
@@ -182,7 +203,14 @@ class DocumentIngestionService:
             f"保存为第 {version_number} 版。"
         )
         self.sqlite_store.log("文档入库", file_path.name, detail)
-        return IngestionResult(file_path.name, "success", len(chunks), detail)
+        return IngestionResult(
+            file_path.name,
+            "success",
+            len(chunks),
+            detail,
+            parser=parsed_document.parser_name,
+            duration_seconds=round(time.monotonic() - started, 1),
+        )
 
     def delete(self, doc_id: str) -> None:
         document = self.sqlite_store.get_document(doc_id)
