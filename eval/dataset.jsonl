@@ -1,2 +1,18 @@
-{"question":"知识库中的食品添加剂使用标准主要规定什么？","answerable":true,"expected_keywords":["食品添加剂","使用"]}
-{"question":"请给出知识库中不存在的火星食品安全国家标准全文。","answerable":false,"expected_keywords":[]}
+{"question": "万向钱潮2023年营业收入是多少？", "answerable": true, "expect_doc": "000559_万向钱潮_2023.pdf", "expect_pages": [7], "expect_evidence": "14,486,808,920.82", "expected_keywords": ["14,486,808,920.82"]}
+{"question": "万向钱潮2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "000559_万向钱潮_2023.pdf", "expect_pages": [7], "expect_evidence": "821,520,182.86", "expected_keywords": ["821,520,182.86"]}
+{"question": "万向钱潮2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "000559_万向钱潮_2023.pdf", "expect_pages": [44, 220], "expect_evidence": "利润分配", "expected_keywords": ["万向钱潮"]}
+{"question": "新纶新材2023年营业收入是多少？", "answerable": true, "expect_doc": "002341_新纶新材_2023.pdf", "expect_pages": [7], "expect_evidence": "662,901,873.70", "expected_keywords": ["662,901,873.70"]}
+{"question": "新纶新材2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "002341_新纶新材_2023.pdf", "expect_pages": [7], "expect_evidence": "947,171,766.67", "expected_keywords": ["947,171,766.67"]}
+{"question": "新纶新材年报中提到可能面对哪些风险？", "answerable": true, "expect_doc": "002341_新纶新材_2023.pdf", "expect_pages": [25], "expect_evidence": "风险", "expected_keywords": ["新纶新材"]}
+{"question": "新纶新材2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "002341_新纶新材_2023.pdf", "expect_pages": [41, 221], "expect_evidence": "利润分配", "expected_keywords": ["新纶新材"]}
+{"question": "福建金森2023年营业收入是多少？", "answerable": true, "expect_doc": "002679_福建金森_2023.pdf", "expect_pages": [7], "expect_evidence": "147,650,078.15", "expected_keywords": ["147,650,078.15"]}
+{"question": "福建金森2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "002679_福建金森_2023.pdf", "expect_pages": [7], "expect_evidence": "8,006,342.42", "expected_keywords": ["8,006,342.42"]}
+{"question": "福建金森年报中提到可能面对哪些风险？", "answerable": true, "expect_doc": "002679_福建金森_2023.pdf", "expect_pages": [21], "expect_evidence": "风险", "expected_keywords": ["福建金森"]}
+{"question": "福建金森2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "002679_福建金森_2023.pdf", "expect_pages": [39, 40], "expect_evidence": "利润分配", "expected_keywords": ["福建金森"]}
+{"question": "青岛中程2023年营业收入是多少？", "answerable": true, "expect_doc": "300208_青岛中程_2023.pdf", "expect_pages": [9], "expect_evidence": "458,970,054.70", "expected_keywords": ["458,970,054.70"]}
+{"question": "青岛中程2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "300208_青岛中程_2023.pdf", "expect_pages": [9], "expect_evidence": "1,159,789,902.43", "expected_keywords": ["1,159,789,902.43"]}
+{"question": "青岛中程2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "300208_青岛中程_2023.pdf", "expect_pages": [46], "expect_evidence": "利润分配", "expected_keywords": ["青岛中程"]}
+{"question": "东吴证券2023年营业收入是多少？", "answerable": true, "expect_doc": "601555_东吴证券_2023.pdf", "expect_pages": [8], "expect_evidence": "11,280,990,458.17", "expected_keywords": ["11,280,990,458.17"]}
+{"question": "东吴证券2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "601555_东吴证券_2023.pdf", "expect_pages": [8], "expect_evidence": "2,002,031,162.53", "expected_keywords": ["2,002,031,162.53"]}
+{"question": "贵州茅台2023年的营业收入是多少？", "answerable": false}
+{"question": "请给出知识库中没有入库的腾讯控股2023年年报全文。", "answerable": false}
