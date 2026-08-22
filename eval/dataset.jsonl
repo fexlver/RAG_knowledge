@@ -1,10 +1,22 @@
 {"question": "万向钱潮2023年营业收入是多少？", "answerable": true, "expect_doc": "000559_万向钱潮_2023.pdf", "expect_pages": [7], "expect_evidence": "14,486,808,920.82", "expected_keywords": ["14,486,808,920.82"]}
 {"question": "万向钱潮2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "000559_万向钱潮_2023.pdf", "expect_pages": [7], "expect_evidence": "821,520,182.86", "expected_keywords": ["821,520,182.86"]}
 {"question": "万向钱潮2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "000559_万向钱潮_2023.pdf", "expect_pages": [44, 220], "expect_evidence": "利润分配", "expected_keywords": ["万向钱潮"]}
+{"question": "永安林业2023年营业收入是多少？", "answerable": true, "expect_doc": "000663_永安林业_2023.pdf", "expect_pages": [7], "expect_evidence": "693,162,044.78", "expected_keywords": ["693,162,044.78"]}
+{"question": "永安林业2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "000663_永安林业_2023.pdf", "expect_pages": [7], "expect_evidence": "190,033,530.14", "expected_keywords": ["190,033,530.14"]}
+{"question": "永安林业年报中提到可能面对哪些风险？", "answerable": true, "expect_doc": "000663_永安林业_2023.pdf", "expect_pages": [31], "expect_evidence": "风险", "expected_keywords": ["永安林业"]}
+{"question": "永安林业2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "000663_永安林业_2023.pdf", "expect_pages": [50], "expect_evidence": "利润分配", "expected_keywords": ["永安林业"]}
+{"question": "ST西发2023年营业收入是多少？", "answerable": true, "expect_doc": "000752_ST西发_2023.pdf", "expect_pages": [7], "expect_evidence": "336,883,697.71", "expected_keywords": ["336,883,697.71"]}
+{"question": "ST西发2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "000752_ST西发_2023.pdf", "expect_pages": [7], "expect_evidence": "25,773,250.02", "expected_keywords": ["25,773,250.02"]}
+{"question": "ST西发年报中提到可能面对哪些风险？", "answerable": true, "expect_doc": "000752_ST西发_2023.pdf", "expect_pages": [21], "expect_evidence": "风险", "expected_keywords": ["ST西发"]}
+{"question": "ST西发2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "000752_ST西发_2023.pdf", "expect_pages": [35], "expect_evidence": "利润分配", "expected_keywords": ["ST西发"]}
 {"question": "新纶新材2023年营业收入是多少？", "answerable": true, "expect_doc": "002341_新纶新材_2023.pdf", "expect_pages": [7], "expect_evidence": "662,901,873.70", "expected_keywords": ["662,901,873.70"]}
 {"question": "新纶新材2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "002341_新纶新材_2023.pdf", "expect_pages": [7], "expect_evidence": "947,171,766.67", "expected_keywords": ["947,171,766.67"]}
 {"question": "新纶新材年报中提到可能面对哪些风险？", "answerable": true, "expect_doc": "002341_新纶新材_2023.pdf", "expect_pages": [25], "expect_evidence": "风险", "expected_keywords": ["新纶新材"]}
 {"question": "新纶新材2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "002341_新纶新材_2023.pdf", "expect_pages": [41, 221], "expect_evidence": "利润分配", "expected_keywords": ["新纶新材"]}
+{"question": "金正大2023年营业收入是多少？", "answerable": true, "expect_doc": "002470_金正大_2023.pdf", "expect_pages": [8], "expect_evidence": "8,548,940,363.92", "expected_keywords": ["8,548,940,363.92"]}
+{"question": "金正大2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "002470_金正大_2023.pdf", "expect_pages": [8], "expect_evidence": "971,207,098.07", "expected_keywords": ["971,207,098.07"]}
+{"question": "金正大年报中提到可能面对哪些风险？", "answerable": true, "expect_doc": "002470_金正大_2023.pdf", "expect_pages": [41], "expect_evidence": "风险", "expected_keywords": ["金正大"]}
+{"question": "金正大2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "002470_金正大_2023.pdf", "expect_pages": [57], "expect_evidence": "利润分配", "expected_keywords": ["金正大"]}
 {"question": "福建金森2023年营业收入是多少？", "answerable": true, "expect_doc": "002679_福建金森_2023.pdf", "expect_pages": [7], "expect_evidence": "147,650,078.15", "expected_keywords": ["147,650,078.15"]}
 {"question": "福建金森2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "002679_福建金森_2023.pdf", "expect_pages": [7], "expect_evidence": "8,006,342.42", "expected_keywords": ["8,006,342.42"]}
 {"question": "福建金森年报中提到可能面对哪些风险？", "answerable": true, "expect_doc": "002679_福建金森_2023.pdf", "expect_pages": [21], "expect_evidence": "风险", "expected_keywords": ["福建金森"]}
@@ -12,6 +24,10 @@
 {"question": "青岛中程2023年营业收入是多少？", "answerable": true, "expect_doc": "300208_青岛中程_2023.pdf", "expect_pages": [9], "expect_evidence": "458,970,054.70", "expected_keywords": ["458,970,054.70"]}
 {"question": "青岛中程2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "300208_青岛中程_2023.pdf", "expect_pages": [9], "expect_evidence": "1,159,789,902.43", "expected_keywords": ["1,159,789,902.43"]}
 {"question": "青岛中程2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "300208_青岛中程_2023.pdf", "expect_pages": [46], "expect_evidence": "利润分配", "expected_keywords": ["青岛中程"]}
+{"question": "申能股份2023年营业收入是多少？", "answerable": true, "expect_doc": "600642_申能股份_2023.pdf", "expect_pages": [6], "expect_evidence": "29,141,612,184.37", "expected_keywords": ["29,141,612,184.37"]}
+{"question": "申能股份2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "600642_申能股份_2023.pdf", "expect_pages": [6], "expect_evidence": "3,458,659,109.38", "expected_keywords": ["3,458,659,109.38"]}
+{"question": "申能股份年报中提到可能面对哪些风险？", "answerable": true, "expect_doc": "600642_申能股份_2023.pdf", "expect_pages": [28], "expect_evidence": "风险", "expected_keywords": ["申能股份"]}
+{"question": "申能股份2023年度的利润分配预案是什么？", "answerable": true, "expect_doc": "600642_申能股份_2023.pdf", "expect_pages": [39, 40], "expect_evidence": "利润分配", "expected_keywords": ["申能股份"]}
 {"question": "东吴证券2023年营业收入是多少？", "answerable": true, "expect_doc": "601555_东吴证券_2023.pdf", "expect_pages": [8], "expect_evidence": "11,280,990,458.17", "expected_keywords": ["11,280,990,458.17"]}
 {"question": "东吴证券2023年归属于上市公司股东的净利润是多少？", "answerable": true, "expect_doc": "601555_东吴证券_2023.pdf", "expect_pages": [8], "expect_evidence": "2,002,031,162.53", "expected_keywords": ["2,002,031,162.53"]}
 {"question": "贵州茅台2023年的营业收入是多少？", "answerable": false}
