@@ -50,6 +50,9 @@ class Settings:
     history_message_limit: int
     # 带默认值，方便测试直接构造 Settings 而不必关心解析器选择。
     pdf_parser: str = "pymupdf_text"
+    # rerank 后精确事实行加分：候选池扩大量与每次命中的加权幅度
+    fact_boost_pool: int = 10
+    fact_boost_weight: float = 0.15
 
     @property
     def milvus_uri(self) -> str:
@@ -95,6 +98,8 @@ class Settings:
             embedding_batch_size=_to_int("EMBEDDING_BATCH_SIZE", 10),
             citation_limit=_to_int("CITATION_LIMIT", 5),
             history_message_limit=_to_int("HISTORY_MESSAGE_LIMIT", 20),
+            fact_boost_pool=_to_int("FACT_BOOST_POOL", 10),
+            fact_boost_weight=_to_float("FACT_BOOST_WEIGHT", 0.15),
         )
 
     def require_dashscope_key(self) -> None:

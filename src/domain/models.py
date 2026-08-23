@@ -64,13 +64,13 @@ class RetrievedChunk:
     lexical_score: float | None = None
     fusion_score: float = 0.0
     rerank_score: float | None = None
+    fact_bonus: float = 0.0
     routes: set[str] = field(default_factory=set)
 
     @property
     def final_score(self) -> float:
-        if self.rerank_score is not None:
-            return self.rerank_score
-        return self.fusion_score
+        base = self.rerank_score if self.rerank_score is not None else self.fusion_score
+        return base + self.fact_bonus
 
 
 @dataclass(frozen=True, slots=True)

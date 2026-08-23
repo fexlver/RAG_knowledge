@@ -13,6 +13,7 @@ from typing import Protocol
 
 from src.config.settings import Settings
 from src.domain.models import RetrievedChunk
+from src.retrieval.fact_boost import apply_fact_line_boost
 from src.retrieval.fusion import reciprocal_rank_fusion
 
 
@@ -389,18 +390,35 @@ class ComposableRetrievalPipeline:
                 )
             )
             started = perf_counter()
-            candidates = reranker.rerank(
-                query, candidates, self.settings.rerank_top_k
+            # 多保留一个候选池：精确事实行加分后目标分片可能从池尾升入结果，
+            # 只取 rerank_top_k 会在加分前就把它们裁掉。
+            pool_size = self.settings.rerank_top_k + self.settings.fact_boost_pool
+            candidates = reranker.rerank(query, candidates, pool_size)
+            boosted = sum(
+                1
+                for item in apply_fact_line_boost(
+                    query, candidates, self.settings.fact_boost_weight
+                )
+                if item.fact_bonus
             )
+            candidates = sorted(
+                candidates, key=lambda item: item.final_score, reverse=True
+            )[: self.settings.rerank_top_k]
             yield RetrievalStreamItem(
                 progress=RetrievalProgress(
                     event_id,
                     "rerank",
                     "completed",
                     reranker.descriptor.label,
-                    f"模型重排完成，保留 {len(candidates)} 条高相关证据。",
+                    f"模型重排完成，保留 {len(candidates)} 条高相关证据"
+                    + (f"（{boosted} 条精确事实行加分）。" if boosted else "。"),
                     int((perf_counter() - started) * 1000),
                 )
+            )
+        elif candidates:
+            apply_fact_line_boost(query, candidates, self.settings.fact_boost_weight)
+            candidates = sorted(
+                candidates, key=lambda item: item.final_score, reverse=True
             )
 
         yield RetrievalStreamItem(results=candidates)
