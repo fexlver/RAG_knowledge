@@ -11,6 +11,8 @@ pymilvus==2.6.17
 pymupdf>=1.25,<2.0
 python-dotenv>=1.1,<2.0
 requests>=2.32,<3.0
+# 结构化解析器（torch 由其拉入；GPU 机器先装 CUDA 版 torch 再装它，见 docs/迁移指南-GPU机器.md）
+docling>=2.121,<3.0
 
 # 开发与评测依赖
 pytest>=8.3,<10.0
