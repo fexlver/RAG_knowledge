@@ -13,7 +13,7 @@ from typing import Protocol
 
 from src.config.settings import Settings
 from src.domain.models import RetrievedChunk
-from src.retrieval.fact_boost import apply_fact_line_boost
+from src.retrieval.fact_boost import apply_fact_line_boost, backfill_fact_candidates
 from src.retrieval.fusion import reciprocal_rank_fusion
 
 
@@ -366,6 +366,7 @@ class ComposableRetrievalPipeline:
             started = perf_counter()
             candidates = fusion.fuse(rankings, self.settings.fusion_top_k)
             candidates = self._normalize_fusion_scores(candidates)
+            candidates = backfill_fact_candidates(query, rankings, candidates, limit=8)
             yield RetrievalStreamItem(
                 progress=RetrievalProgress(
                     event_id,

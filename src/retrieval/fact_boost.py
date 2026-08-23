@@ -63,6 +63,41 @@ def count_label_hits(query_terms: list[str], content: str) -> int:
     return sum(1 for term in query_terms if any(term in label for label in labels))
 
 
+def specific_terms(query_terms: list[str]) -> list[str]:
+    """标签命中用的特指词：>=3 字单词 + 相邻词拼接的复合词。
+
+    jieba 会把"营业收入"拆成"营业""收入"两个 2 字词，营收类问题在长度
+    过滤下会颗粒无收；而"风险""利润"这类孤立 2 字泛词又会命中无关表格
+    的标签行。把相邻分词拼回复合词（营业+收入 -> 营业收入）两头兼顾：
+    拼得出的复合词是"要找哪一行"的强信号，拼不出的孤立泛词不参与。
+    """
+
+    singles = [term for term in query_terms if len(term) >= 3]
+    compounds = [
+        first + second
+        for first, second in zip(query_terms, query_terms[1:])
+        if len(first + second) >= 3
+    ]
+    ordered: list[str] = []
+    for term in singles + compounds:
+        if term not in ordered:
+            ordered.append(term)
+    return ordered
+
+
+def _boost_eligible(
+    query_terms: list[str], quarterly_intent: bool, chunk
+) -> bool:
+    """加分/回填的统一守门：实体锚定 + 分季度守卫。"""
+
+    source = chunk.metadata.source or ""
+    if not any(term in source for term in query_terms):
+        return False
+    if not quarterly_intent and "分季度" in chunk.section:
+        return False
+    return True
+
+
 def apply_fact_line_boost(
     query: str,
     candidates: list[RetrievedChunk],
@@ -79,11 +114,54 @@ def apply_fact_line_boost(
     query_terms = extract_query_terms(query)
     if not query_terms:
         return candidates
+    quarterly_intent = "季度" in query
+    label_terms = specific_terms(query_terms)
+    if not label_terms:
+        return candidates
     for item in candidates:
-        source = item.chunk.metadata.source or ""
-        if not any(term in source for term in query_terms):
+        if not _boost_eligible(query_terms, quarterly_intent, item.chunk):
             continue
-        hits = count_label_hits(query_terms, item.chunk.content)
+        hits = count_label_hits(label_terms, item.chunk.content)
         if hits:
             item.fact_bonus = min(weight * hits, max_bonus)
+    return candidates
+
+
+def backfill_fact_candidates(
+    query: str,
+    rankings: list[list[RetrievedChunk]],
+    candidates: list[RetrievedChunk],
+    limit: int = 5,
+) -> list[RetrievedChunk]:
+    """把没挤进融合池的精确事实行分片补进重排队列。
+
+    表格分片不含公司名：词法检索里与所有公司的同名行并列（排名靠后），
+    语义检索也排不进前列，RRF 融合后常掉出候选池。这里从各路召回的完整
+    结果里捞回通过守门且标签命中的分片，直接交给 rerank+加分竞争。
+    """
+
+    query_terms = extract_query_terms(query)
+    if not query_terms:
+        return candidates
+    quarterly_intent = "季度" in query
+    label_terms = specific_terms(query_terms)
+    if not label_terms:
+        return candidates
+    existing = {item.chunk.chunk_id for item in candidates}
+    pool: list[tuple[int, RetrievedChunk]] = []
+    for ranking in rankings:
+        for item in ranking:
+            if item.chunk.chunk_id in existing:
+                continue
+            if not _boost_eligible(query_terms, quarterly_intent, item.chunk):
+                continue
+            hits = count_label_hits(label_terms, item.chunk.content)
+            if hits >= 1:
+                pool.append((hits, item))
+    # 标签命中越多越是"营业收入那一行"本尊；先到先得会捞进弱命中的邻行分片。
+    pool.sort(key=lambda pair: pair[0], reverse=True)
+    floor = min((item.fusion_score for item in candidates), default=0.0)
+    for _hits, item in pool[:limit]:
+        item.fusion_score = floor * 0.5
+        candidates.append(item)
     return candidates

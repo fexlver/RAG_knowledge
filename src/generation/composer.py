@@ -62,13 +62,11 @@ class AnswerComposer:
 
         citations: list[Citation] = []
         contexts: list[str] = []
-        seen: set[tuple[str, int | None, str]] = set()
+        # 按块去重而非按页/章节去重：长表按行拆分后，同页同章节的
+        # 兄弟分片各含不同数据行，按页去重会把表格切掉一半。
+        seen: set[str] = set()
         for item in evidence:
-            key = (
-                item.chunk.metadata.source,
-                item.chunk.page_number,
-                item.chunk.section,
-            )
+            key = item.chunk.chunk_id
             if key in seen:
                 continue
             seen.add(key)

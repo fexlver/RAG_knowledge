@@ -15,11 +15,14 @@ from src.retrieval.fact_boost import (
 )
 
 
+_COUNTER = iter(range(1000))
+
+
 def make_chunk(content: str, rerank_score: float = 0.5, source: str = "测试.pdf") -> RetrievedChunk:
     metadata = DocumentMetadata(source=source, content_hash="a" * 64)
     return RetrievedChunk(
         chunk=DocumentChunk(
-            chunk_id="c1",
+            chunk_id=f"c{next(_COUNTER)}",
             doc_id="d1",
             content=content,
             chunk_index=0,
@@ -60,6 +63,7 @@ def test_prose_paragraph_never_boosted():
 
 
 def test_apply_boost_lifts_low_ranked_exact_fragment():
+    # 真实场景中兄弟分片与目标分片的 rerank 分差约 0.02-0.07
     exact = make_chunk(
         "| 营业收入 | 11,280,990,458.17 | 14.3 |",
         rerank_score=0.40,
@@ -67,7 +71,7 @@ def test_apply_boost_lifts_low_ranked_exact_fragment():
     )
     sibling = make_chunk(
         "| 总资产 | 157,495,307,814.69 | 15.84 |",
-        rerank_score=0.60,
+        rerank_score=0.45,
         source="601555_东吴证券_2023.pdf",
     )
     query = "东吴证券2023年营业收入是多少？"
@@ -100,3 +104,46 @@ def test_generic_term_company_does_not_hit_basic_info_row():
     content = "| 公司的中文 名称 | 东吴证券股份有限公司 |"
     terms = extract_query_terms("公司2023年营业收入是多少？")
     assert count_label_hits(terms, content) == 0
+
+
+def test_quarterly_section_skipped_unless_quarterly_intent():
+    quarterly = make_chunk(
+        "| 归属于上市公司股东的净利润 | -40,258,108.32 | -111,168,825.86 |",
+        source="002470_金正大_2023.pdf",
+    )
+    quarterly.chunk.section = "3.2 报告期分季度的主要会计数据"
+    annual = make_chunk(
+        "| 归属于上市公司股东的净利润 | -971,206,197.07 |",
+        source="002470_金正大_2023.pdf",
+    )
+    annual.chunk.section = "3.1 近 3 年的主要会计数据和财务指标"
+
+    annual_query = "金正大2023年归属于上市公司股东的净利润是多少？"
+    apply_fact_line_boost(annual_query, [quarterly, annual], weight=0.15)
+    assert quarterly.fact_bonus == 0
+    assert annual.fact_bonus > 0
+
+    quarterly.fact_bonus = 0.0
+    quarterly_query = "金正大2023年第四季度归属于上市公司股东的净利润是多少？"
+    apply_fact_line_boost(quarterly_query, [quarterly], weight=0.15)
+    assert quarterly.fact_bonus > 0
+
+
+def test_backfill_rescues_fragment_beyond_fusion_pool():
+    from src.retrieval.fact_boost import backfill_fact_candidates
+
+    exact = make_chunk(
+        "| 归属于上市公司股东的净利润 | 971,207,098.07 |",
+        source="002470_金正大_2023.pdf",
+    )
+    exact.chunk.section = "六、主要会计数据和财务指标"
+    weak = make_chunk("| 净利润 | 123 |", source="002470_金正大_2023.pdf")
+    in_pool = make_chunk("报告期经营情况讨论。", source="002470_金正大_2023.pdf")
+    in_pool.fusion_score = 0.9
+    weak.fusion_score = 0.2
+
+    query = "金正大2023年归属于上市公司股东的净利润是多少？"
+    candidates = backfill_fact_candidates(query, [[weak, exact]], [in_pool], limit=1)
+
+    assert exact in candidates  # 命中数多的优先进池
+    assert weak not in candidates  # 名额有限时弱命中被让位
