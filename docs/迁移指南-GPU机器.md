@@ -1,122 +1,125 @@
-# 迁移指南：把工作台搬到有 RTX 5060 的 Windows 机器
+# 迁移指南：把工作台搬到有 RTX 5060 的 Windows 机器（Docker 一键版）
 
-> 目标：新机器成为"解析工作站"（GPU 加速入库 + 全量重灌）；本机可继续当日常开发机。
-> 总体思路：**代码和数据搬过去，环境在新机器重建**——因为新机器本来就要装 CUDA 版 torch，直接拷贝旧环境（CPU 版 torch + 旧路径）反而会打架。
+> 目标：新机器成为"解析工作站"（GPU 加速入库 + 全量重灌）。
+> **推荐路径：Docker 一键部署**——应用已容器化（Dockerfile + docker-compose.yml），
+> 新机器只需要装一个 Docker Desktop，不再需要 conda / node / pip。
 
 ## 一、要搬什么
 
 | 内容 | 位置 | 体量 | 搬法 |
 | --- | --- | --- | --- |
-| 代码仓库 | 整个项目目录（含 `.git`） | 几 MB | U 盘/局域网拷贝（或 push 到私有远端再 clone） |
-| 年报语料 | `corpus/raw/` | 460 MB | 随仓库拷贝 |
-| 业务数据 | `data/`（SQLite 库 + uploads 产物） | 88 MB | 随仓库拷贝 |
-| API 密钥 | `.env`（DASHSCOPE_API_KEY） | <1 KB | 随仓库拷贝（git 故意忽略它，别忘了） |
-| Python 环境 | `.conda/envs/food-rag/` | ~10 GB | **不搬**，新机器按第三节重建 |
-| Milvus 向量数据 | Docker 卷 | ~几百 MB | **不搬**，重灌重建（见第二节） |
-| 前端依赖 | `frontend/node_modules/` | ~几百 MB | **不搬**，`npm ci` 重建 |
+| 项目目录 | 整个 `RAG_knowledge/`（含 `.git`、`Dockerfile`、compose 文件） | 几 MB | U 盘/局域网 |
+| 年报语料 | `corpus/raw/` | 460 MB | 随目录 |
+| 业务数据 | `data/`（SQLite + uploads） | 88 MB | 随目录 |
+| API 密钥 | `.env` | <1 KB | 随目录（**格式必须是"无引号无行内注释"**，见第四节） |
+| Docker 镜像 | - | - | 新机器 `docker compose up --build` 现场构建（首构建约下载 10GB，一次性） |
+| Milvus 向量数据 | Docker 卷 | ~几百 MB | **不搬**，重灌重建（理由见第二节） |
 
-本机打包命令（Git Bash，排除不搬的部分）：
+不需要拷贝：`.conda/`、`node_modules/`、`frontend/dist`、`.pytest_tmp`（都会重建）。
 
 ```bash
+# 本机打包（Git Bash）
 cd /e/A_project
-tar --exclude='RAG_knowledge/node_modules' \
-    --exclude='RAG_knowledge/.conda' \
+tar --exclude='RAG_knowledge/.conda' \
     --exclude='RAG_knowledge/frontend/node_modules' \
     --exclude='RAG_knowledge/frontend/dist' \
     --exclude='RAG_knowledge/.pytest_tmp' \
     -czf RAG_knowledge_migrate.tar.gz RAG_knowledge
-# 产物约 550MB，U 盘或scp到新机器后解压
 ```
 
 ## 二、Milvus 向量数据为什么不搬（数据集策略）
 
-向量库（food_safety_chunks_v3，13,000+ 块的 embedding）**直接丢弃，到新机器重新上传生成**：
+向量库（13,000+ 块的 embedding）**丢弃，重新上传生成**：
 
-1. 计划本来就是全量重灌——断数字修复、小表不拆分、表格实体前缀三个确诊问题都要重灌才能根治，GPU 到位后正好一次做完；
-2. 重灌的原料（corpus/raw 的 100 份 PDF）必须随机器走，原料在，向量随时能再生（embedding 走 DashScope API，跟本机无关）；
-3. Milvus 有官方 backup 工具可以做卷迁移，但为一份"注定要重建的一次性数据"引入额外工具链不值。
+1. 计划本来就是全量重灌——断数字修复、小表不拆分、表格实体前缀三个确诊问题都要重灌根治；
+2. 重灌原料（corpus/raw 的 100 份 PDF）随机器走，embedding 走 DashScope API 与机器无关；
+3. 为一次性数据引入 milvus-backup 迁移工具链不值。
 
-**连带影响与处理**：SQLite 里的旧文档记录指向 Milvus 里已不存在的向量——旧文档在界面上能看到、但检索不到。两种处理：
+**连带影响**：SQLite 里的旧文档记录指向不存在的向量——旧文档可见但检索不到。处理：照常拷 `data/`（保留会话历史与配置），到新机器后删除旧文档、重新上传全量语料。
 
-- **推荐**：照常拷贝 `data/`（保留全部会话历史、模型配置、检索配置），到新机器后把旧文档逐个删除（界面操作即可），然后用 GPU 管线重新上传全量语料；
-- 或者：新机器的 `data/` 从零开始（历史全部丢弃，系统全新）。
+## 三、新机器三步走
 
-## 三、新机器搭建步骤
+### 1. 装软件（唯一的前置）
 
-### 1. 基础软件
+- **Docker Desktop**（WSL2 后端，安装时默认）+ 显卡驱动
+- 验证 GPU 直通可用：
+  ```powershell
+  docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu22.04 nvidia-smi
+  # 能列出 RTX 5060 即通
+  ```
 
-- Git、Node.js（≥20）、Docker Desktop、Miniconda
-- NVIDIA 驱动（随显卡装好即可）
+### 2. 解压项目，改 .env
 
-### 2. 解压项目并启动 Milvus
+`.env` 里确认 `DASHSCOPE_API_KEY=` 已填（其余项有默认值）。
+
+### 3. 一键启动
 
 ```bash
-tar -xzf RAG_knowledge_migrate.tar.gz
 cd RAG_knowledge
-docker compose -f milvus_docker.yml up -d
-# 等 1 分钟让三个容器转健康：docker ps 应看到 food-rag-milvus (healthy)
-# 可选图形界面：docker compose -f milvus_docker.yml --profile tools up -d (attu, 端口8000)
+docker compose -f docker-compose.yml -f compose.gpu.yml up -d --build
+# 首次构建约 10-20 分钟（下载 CUDA torch 等约 10GB），之后秒级启动
+docker compose ps   # 等四个容器都 healthy/running
 ```
 
-### 3. Python 环境（与 CPU 机器的唯一差异在这里）
+打开 `http://127.0.0.1:7860`。
+
+**验证清单**（每步隔离一个组件）：
+
+1. 界面能看到旧文档列表 → SQLite（挂载卷）OK；
+2. 上传一份小年报走完 解析→向量→写入 → Milvus + DashScope + 管线 OK；
+3. 提问并点开引用 → 全链路 OK（含容器内凭据回退：读 .env 的 DASHSCOPE_API_KEY）；
+4. 容器内验证 GPU：`docker compose exec app python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"` → `True NVIDIA GeForce RTX 5060`。
+
+之后删除旧文档，开始全量重灌。评测在容器内跑：`docker compose exec app python eval/run_eval.py --tier retrieval`。
+
+### GPU 直通是什么
+
+容器里的程序默认**看不到宿主机显卡**。`compose.gpu.yml` 里的 `deploy.resources.reservations.devices` 声明把 NVIDIA 设备透传进容器，Docker Desktop（WSL2）+ 官方驱动即可，容器内不需要装驱动。`docker-compose.yml` 默认不带这段（无卡机器也能起），GPU 机器用 `-f compose.gpu.yml` 叠加。
+
+## 四、.env 格式约束（重要）
+
+Docker 的 `--env-file` 不解析引号和行内注释，与 python-dotenv 不同。**格式必须是**：
+
+```ini
+# 注释独立成行（行首 # 可以）
+DASHSCOPE_API_KEY=sk-xxx
+MILVUS_HOST=127.0.0.1
+MILVUS_PORT=19530
+```
+
+不要写 `MILVUS_PORT="19530" # 端口` 这种（引号和注释会变成值的一部分，应用启动即报错）。本项目 `.env` 已按此规范重写过；新增配置项时遵守。
+
+注意：compose 里 `environment:` 的 `MILVUS_HOST: milvus` 会覆盖 `.env` 的 127.0.0.1（容器内访问同网络的 milvus 服务），这是预期行为。
+
+## 五、常用运维命令
 
 ```bash
-conda env create -f environment.yml
-conda activate food-rag
-
-# 关键：先装 CUDA 版 torch，再装依赖 docling 等
-# 5060 是 Blackwell 架构(sm_120)，需要 CUDA 12.8+ 的轮子
-pip install torch --index-url https://download.pytorch.org/whl/cu128
-pip install -r requirements.txt
-
-# 验证 GPU 可用（必须两行都正确输出）
-python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-# 期望输出类似： True NVIDIA GeForce RTX 5060
+docker compose logs -f app                    # 看应用日志
+docker compose restart app                    # 重启应用
+docker compose up -d --build                  # 改代码后重建
+docker compose exec app python -m pytest test/ -q   # 容器内跑测试
+docker compose down                           # 停止（数据卷保留）
 ```
 
-> 注意：CPU 机器上 torch 装的是默认（CPU）版本；两台机器的 pip 依赖列表相同、只有 torch 轮子不同。这也是环境选择重建而不是拷贝的原因。
+数据持久化位置：SQLite 与 uploads 在宿主机 `./data/`（容器重建不丢）；docling 模型权重在具名卷 `docling-cache`（首次解析下载约 2GB，之后复用）。
 
-### 4. 前端
+## 六、本机（无卡）开发模式（可选）
+
+本机继续用 conda 直跑不受影响：`python app.py`。两台机器同一套代码；若想本机也容器化跑 CPU 版：
 
 ```bash
-cd frontend && npm ci && npm run build
+docker build --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu -t food-rag-app:cpu .
+docker compose up -d    # 不带 gpu 覆盖文件
 ```
 
-### 5. 启动与验证清单
+## 七、常见坑
 
-```bash
-# 回到项目根目录
-python app.py            # 打开 http://127.0.0.1:7860
-```
-
-按顺序验证（每步失败都能把问题隔离在单一组件）：
-
-1. `GET /api/documents` 返回旧文档列表 → SQLite 迁移 OK；
-2. 界面上传一份小年报（如 corpus/raw/601555_东吴证券_2023.pdf）走完解析→向量→写入 → Milvus + DashScope API + 管线 OK；
-3. 问一个该年报的问题，引用能点开原文 → 全链路 OK；
-4. 删除旧文档（第二批重灌前清理干净）。
-
-### 6. 第一个开发任务：给 docling 接上 GPU
-
-当前代码里 docling 用 CPU 跑版面模型（4.4 秒/页）。GPU 加速需要改 `src/ingestion/docling_parser.py`，在 `PdfPipelineOptions` 上挂：
-
-```python
-from docling.datamodel.accelerator_options import AcceleratorOptions, AcceleratorDevice
-
-pipeline_options.accelerator_options = AcceleratorOptions(
-    num_threads=8,
-    device=AcceleratorDevice.CUDA,   # 从环境变量读，默认 CPU，两台机器共用一套代码
-)
-```
-
-验收：拿 002679_福建金森（160 页，CPU 实测 1038 秒）重新解析计时，记录提速比。这是迁移后的第一个实验，结论决定全量重灌的预估工时。
-
-## 四、常见坑
-
-| 坑 | 说明 |
+| 坑 | 现象与处理 |
 | --- | --- |
-| 忘了拷 `.env` | 应用起得来但 embedding/问答全报错（API key 缺失），且 `.env` 不在 git 里 |
-| Docker Desktop 没装/没启动 | Milvus 连接报 `Connection refused: 19530` |
-| 先装了 requirements 再装 CUDA torch | pip 可能重复解析 torch 版本；顺序一定是 **torch(CUDA) 在前** |
-| 新机器路径不同 | 代码里无绝对路径依赖（全部相对项目根），换盘符/目录不需要改代码 |
-| 旧文档检索不到 | 预期行为（向量没迁），按第二节处理：删除旧文档 + 重灌 |
+| 忘拷 `.env` | 应用起得来但问答/向量化报错（API key 缺失） |
+| .env 带引号/行内注释 | 启动即 `ValueError: invalid literal for int()`（本机已踩过） |
+| 镜像源失效 | `docker pull` 报 mirror EOF：直接拉取通常可行（本机实测），或换可用镜像源后重启 Docker |
+| Docker Desktop 未就绪 | Milvus 连接 `Connection refused: 19530` |
+| 首次构建慢 | CUDA torch 约 10GB，属正常；`docling-cache` 卷首次解析再下载 2GB 模型 |
+| 旧文档检索不到 | 预期（向量未迁）：删除旧文档 + 重灌 |
+| GPU 容器起不来 | 确认用的是 `-f compose.gpu.yml` 叠加且驱动正常；无卡机器去掉该文件即可 |

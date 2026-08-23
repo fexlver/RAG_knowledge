@@ -1,0 +1,15 @@
+# GPU 直通覆盖文件：仅在装有 NVIDIA 显卡的机器上叠加使用。
+# 容器里的程序默认看不到宿主机显卡；这段声明把 GPU 设备透传进容器，
+# Docker Desktop（WSL2 后端）+ 官方驱动即可生效，无需在容器里装驱动。
+#
+# 用法：docker compose -f docker-compose.yml -f compose.gpu.yml up -d
+
+services:
+  app:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

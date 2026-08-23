@@ -1,0 +1,35 @@
+# 一键启动整套系统：应用 + Milvus 全家桶。
+# 新机器（装好 Docker Desktop 后）：
+#   docker compose up -d --build                 # CPU 机器/首次构建
+#   docker compose -f docker-compose.yml -f compose.gpu.yml up -d   # 有 NVIDIA 卡的机器
+#
+# include 复用 milvus_docker.yml 的 etcd/minio/milvus 定义，不重复维护。
+
+include:
+  - milvus_docker.yml
+
+services:
+  app:
+    build: .
+    container_name: food-rag-app
+    ports:
+      - "7860:7860"
+    env_file:
+      - .env
+    environment:
+      # 容器内访问同网络的 milvus 服务；覆盖 .env 里的 127.0.0.1
+      MILVUS_HOST: milvus
+      MILVUS_PORT: "19530"
+      PDF_PARSER: docling
+    volumes:
+      # 业务数据落在宿主机目录，容器重建不丢
+      - ./data:/app/data
+      - ./corpus:/app/corpus:ro
+      # docling 模型权重（首次解析约 2GB，落在具名卷里避免重复下载）
+      - docling-cache:/root/.cache
+    depends_on:
+      milvus:
+        condition: service_healthy
+
+volumes:
+  docling-cache:
