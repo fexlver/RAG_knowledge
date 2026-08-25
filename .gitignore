@@ -23,6 +23,7 @@ node_modules/
 *.egg-info/
 eval/results/
 data/uploads/
+corpus/
 output/playwright/*.log
 langchain_milvus_ops.py
 corpus/raw/

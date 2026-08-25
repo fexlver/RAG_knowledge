@@ -34,6 +34,20 @@
 
 ![知识库管理](output/playwright/knowledge-base.png)
 
+### 按会话选择生成模型
+
+输入区左下角的模型选择器展示各提供方已启用的生成模型，切换后绑定到当前会话并持久化；Embedding 与 Rerank 保持知识库全局配置，避免向量维度不一致。模型未返回 Token 用量时界面如实标注，不做伪造估算。
+
+![按会话选择生成模型](output/playwright/ui-comments-model-menu.png)
+
+### 深色主题与三栏工作台
+
+支持浅色、深色、跟随系统三种主题；桌面端为“会话栏 + 对话区 + 原文预览”三栏布局，栏宽可拖动调整，窄屏自动切换为紧凑导航与原文抽屉。
+
+![深色主题三栏工作台](output/playwright/ui-comments-dark-three-panel.png)
+
+![深色主题下的问答与引用效果](output/playwright/ui-comments-final.png)
+
 ## 核心能力
 
 - `Milvus Dense Top-K + SQLite FTS5 + RRF + Qwen Rerank` 四阶段检索，兼顾自然语言语义与标准号、条款号等精确词。
@@ -43,7 +57,7 @@
 - 使用“证据标签”与最终引用编号分离，过滤越界引用，避免把法律条款序号误识别为引用编号。
 - PDF 入库保留页码、文本块、归一化坐标和锚点文本；TXT 保留字符范围与行号范围。
 - 会话、消息、结构化轨迹、引用、文档版本、操作日志、模型、Token 用量和拒答状态持久化到 SQLite。
-- 支持 DashScope 与 OpenAI-compatible 模型提供方，可接入 OpenAI、DeepSeek、OpenRouter、Ollama 和 vLLM 等服务。
+- 支持 DashScope 与 OpenAI-compatible 模型提供方，可接入 OpenAI、DeepSeek、OpenRouter、Ollama 和 vLLM 等服务；聊天生成模型可按会话切换并随会话持久化。
 - API Key 写入系统凭据库；Windows 使用 Credential Manager，SQLite 和接口仅保留 `has_api_key` 状态。
 - 浅色、深色、跟随系统三种主题；桌面三栏可拖动调整，窄屏使用紧凑导航与原文抽屉。
 
@@ -166,7 +180,13 @@ src/services/   应用用例与依赖装配
 src/storage/    SQLite 与 Milvus 适配器
 test/           后端离线测试
 eval/           端到端评测集与脚本
+docs/           设计方案与升级规划文档
+plan/           迭代进度记录
 ```
+
+## 后续规划
+
+面向部门级内网私有化部署的下一阶段升级方案（Docling 文档解析、PostgreSQL/MinIO/Redis 基础设施、Milvus BM25 混合检索、ACL 权限预过滤、多模态增强与评测体系）见 [docs/enterprise-upgrade-plan.md](docs/enterprise-upgrade-plan.md)。
 
 ## 使用边界
 
